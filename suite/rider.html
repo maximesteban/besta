@@ -50,11 +50,41 @@ body.ready { visibility: visible; }
   background: var(--bg-2); border: 1px solid var(--line); border-radius: 14px;
   padding: 18px 18px 6px; margin-bottom: 18px;
 }
-.card > h2 {
+.card h2 {
   margin: 0 0 4px; font-size: 12px; letter-spacing: .16em;
   text-transform: uppercase; color: var(--accent); font-weight: 700;
 }
-.card > .card-sub { margin: 0 0 16px; font-size: 12.5px; color: var(--muted); }
+.card .card-sub { margin: 0 0 16px; font-size: 12.5px; color: var(--muted); }
+.card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.card-head h2 { margin: 0; }
+/* Interruptor de sección: lo apagado sigue editable pero no sale en el PDF. */
+.sw {
+  margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 7px;
+  background: var(--bg-3); border: 1px solid var(--line); color: var(--muted);
+  border-radius: 999px; padding: 5px 11px 5px 7px; font-size: 11px; font-weight: 600;
+  white-space: nowrap; transition: color .15s, border-color .15s;
+}
+.sw .knob {
+  width: 26px; height: 15px; border-radius: 999px; flex: none;
+  background: rgba(255,255,255,.14); position: relative; transition: background .15s;
+}
+.sw .knob::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px;
+  border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s;
+}
+.sw.on { color: var(--accent); border-color: rgba(var(--accent-rgb), .45); }
+.sw.on .knob { background: rgba(var(--accent-rgb), .3); }
+.sw.on .knob::after { transform: translateX(11px); background: var(--accent); }
+.sw.mini { margin-left: 0; padding: 3px 9px 3px 5px; font-size: 10px; }
+.sw.mini .knob { width: 22px; height: 13px; }
+.sw.mini .knob::after { width: 9px; height: 9px; }
+.sw.mini.on .knob::after { transform: translateX(9px); }
+.card.off .card-body, .field.off > *:not(.field-head) { opacity: .38; }
+.card.off h2 { color: var(--muted); }
+.field-head { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; }
+.field-head > span {
+  font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+}
 .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .grid.two { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 textarea { min-height: 92px; resize: vertical; line-height: 1.5; }
@@ -391,6 +421,12 @@ table.p-chan tr:last-child td { border-bottom: 0; }
   ];
   const ICON_KINDS = new Set(ICONS.map(i => i.kind));
 
+  /* Bloques que se pueden quitar de un rider concreto: no todas las salas
+     tienen camerino, ni todos los bolos necesitan plano. Todo va activado
+     salvo que se apague a mano aquí. */
+  const SECTION_KEYS = ["members", "channels", "backline", "monitors", "power", "times",
+                        "stage", "hospitality", "notes"];
+
   /* ---------------------------------------------------------
      Documento por defecto: el rider que la banda ya mandaba,
      pasado a limpio y completado con lo que pide cualquier
@@ -530,6 +566,10 @@ table.p-chan tr:last-child td { border-bottom: 0; }
       role: c.role || "", name: c.name || "", phone: c.phone || "", email: c.email || ""
     }));
     d.times = Object.assign({ load: "", check: "", show: "" }, d.times || {});
+    // Secciones apagadas. Lo que no está aquí, va: un rider viejo sigue completo.
+    const off = {};
+    SECTION_KEYS.forEach(k => { if (d.off && d.off[k]) off[k] = true; });
+    d.off = off;
     const st = d.stage && typeof d.stage === "object" ? d.stage : {};
     d.stage = {
       width: st.width || "", depth: st.depth || "",
@@ -548,7 +588,7 @@ table.p-chan tr:last-child td { border-bottom: 0; }
     return {
       subtitle: "", members: [], channels: [], backlineBand: [], backlineVenue: [],
       monitors: [], power: [], times: { load: "", check: "", show: "" },
-      hospitality: [], contacts: [], notes: "", stage: { width: "", depth: "", items: [] }
+      hospitality: [], contacts: [], notes: "", stage: { width: "", depth: "", items: [] }, off: {}
     };
   }
   const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
@@ -690,11 +730,29 @@ table.p-chan tr:last-child td { border-bottom: 0; }
   }
 
   /* ---------------- editor ---------------- */
+  const isOn = k => !doc.off[k];
+
+  /* Interruptor de una sección. El texto dice a las claras qué pasa: lo
+     apagado se sigue editando aquí pero no aparece en el documento. */
+  function sw(key, mini) {
+    const on = isOn(key);
+    return `<button type="button" class="sw${mini ? " mini" : ""}${on ? " on" : ""}"
+      data-toggle="${key}" role="switch" aria-checked="${on}"
+      title="Apágalo cuando no aplique: deja de salir en el documento y en el PDF">
+      <span class="knob"></span><span class="sw-txt">${on ? "en el rider" : "fuera"}</span></button>`;
+  }
+
   function renderEditor() {
     const m = doc;
+    const card = (key, title, sub, body) => `
+      <div class="card${key && !isOn(key) ? " off" : ""}"${key ? ` data-card="${key}"` : ""}>
+        <div class="card-head"><h2>${title}</h2>${key ? sw(key) : ""}</div>
+        ${sub ? `<p class="card-sub">${sub}</p>` : ""}
+        <div class="card-body">${body}</div>
+      </div>`;
+
     $("view-edit").innerHTML = `
-      <div class="card">
-        <h2>documento</h2>
+      ${card("", "documento", "", `
         <div class="grid">
           <label class="field"><span>Formato</span>
             <input type="text" data-row="name" value="${esc(current.name)}" placeholder="Banda completa"></label>
@@ -702,19 +760,13 @@ table.p-chan tr:last-child td { border-bottom: 0; }
             <input type="text" data-row="version" value="${esc(current.version)}" placeholder="2026.1"></label>
           <label class="field"><span>Subtítulo</span>
             <input type="text" data-doc="subtitle" value="${esc(m.subtitle)}" placeholder="Pop-rock · Castelldefels"></label>
-        </div>
-      </div>
+        </div>`)}
 
-      <div class="card">
-        <h2>músicos y necesidades</h2>
-        <p class="card-sub">Una necesidad por línea. Es lo que la sala lee de un vistazo.</p>
+      ${card("members", "músicos y necesidades", "Una necesidad por línea. Es lo que la sala lee de un vistazo.", `
         <div class="mems">${m.members.map(memCard).join("")}</div>
-        <div class="row-add"><button type="button" class="btn-ghost sm" data-add="member">+ músico</button></div>
-      </div>
+        <div class="row-add"><button type="button" class="btn-ghost sm" data-add="member">+ músico</button></div>`)}
 
-      <div class="card">
-        <h2>input list</h2>
-        <p class="card-sub">Los canales van numerados solos por el orden de la tabla.</p>
+      ${card("channels", "input list", "Los canales van numerados solos por el orden de la tabla.", `
         <div class="tbl-wrap">
           <table class="chan">
             <thead><tr>
@@ -723,40 +775,40 @@ table.p-chan tr:last-child td { border-bottom: 0; }
             <tbody>${m.channels.map(chanRow).join("")}</tbody>
           </table>
         </div>
-        <div class="row-add"><button type="button" class="btn-ghost sm" data-add="channel">+ canal</button></div>
-      </div>
+        <div class="row-add"><button type="button" class="btn-ghost sm" data-add="channel">+ canal</button></div>`)}
 
-      <div class="card">
-        <h2>backline</h2>
+      ${card("backline", "backline", "", `
         <div class="grid two">
           <label class="field"><span>Lo que lleva la banda</span>
             <textarea class="lines" data-list="backlineBand">${esc(fromLines(m.backlineBand))}</textarea></label>
           <label class="field"><span>Lo que pedimos a la sala</span>
             <textarea class="lines" data-list="backlineVenue">${esc(fromLines(m.backlineVenue))}</textarea></label>
-        </div>
-      </div>
+        </div>`)}
 
-      <div class="card">
-        <h2>monitores, corriente y tiempos</h2>
+      ${card("", "monitores, corriente y tiempos", "Cada bloque se apaga por separado.", `
         <div class="grid two">
-          <label class="field"><span>Monitoraje</span>
-            <textarea class="lines" data-list="monitors">${esc(fromLines(m.monitors))}</textarea></label>
-          <label class="field"><span>Corriente</span>
-            <textarea class="lines" data-list="power">${esc(fromLines(m.power))}</textarea></label>
+          <div class="field${isOn("monitors") ? "" : " off"}" data-block="monitors">
+            <div class="field-head"><span>Monitoraje</span>${sw("monitors", true)}</div>
+            <textarea class="lines" data-list="monitors">${esc(fromLines(m.monitors))}</textarea>
+          </div>
+          <div class="field${isOn("power") ? "" : " off"}" data-block="power">
+            <div class="field-head"><span>Corriente</span>${sw("power", true)}</div>
+            <textarea class="lines" data-list="power">${esc(fromLines(m.power))}</textarea>
+          </div>
         </div>
-        <div class="grid">
-          <label class="field"><span>Montaje</span>
-            <input type="text" data-times="load" value="${esc(m.times.load)}" placeholder="60 min"></label>
-          <label class="field"><span>Prueba de sonido</span>
-            <input type="text" data-times="check" value="${esc(m.times.check)}" placeholder="45 min"></label>
-          <label class="field"><span>Concierto</span>
-            <input type="text" data-times="show" value="${esc(m.times.show)}" placeholder="60–75 min"></label>
-        </div>
-      </div>
+        <div class="field${isOn("times") ? "" : " off"}" data-block="times">
+          <div class="field-head"><span>Tiempos</span>${sw("times", true)}</div>
+          <div class="grid">
+            <label class="field"><span>Montaje</span>
+              <input type="text" data-times="load" value="${esc(m.times.load)}" placeholder="60 min"></label>
+            <label class="field"><span>Prueba de sonido</span>
+              <input type="text" data-times="check" value="${esc(m.times.check)}" placeholder="45 min"></label>
+            <label class="field"><span>Concierto</span>
+              <input type="text" data-times="show" value="${esc(m.times.show)}" placeholder="60–75 min"></label>
+          </div>
+        </div>`)}
 
-      <div class="card">
-        <h2>escenario</h2>
-        <p class="card-sub">Arrastra cada elemento a su sitio. El fondo del escenario es la parte de arriba.</p>
+      ${card("stage", "escenario", "Arrastra cada elemento a su sitio. El fondo del escenario es la parte de arriba.", `
         <div class="grid">
           <label class="field"><span>Ancho mínimo</span>
             <input type="text" data-stage="width" value="${esc(m.stage.width)}" placeholder="6 m"></label>
@@ -771,22 +823,19 @@ table.p-chan tr:last-child td { border-bottom: 0; }
           <span class="plot-back">fondo del escenario</span>
           <span class="plot-front">público</span>
         </div>
-        <p class="hint">Toca un elemento para renombrarlo, cambiarle el tamaño o quitarlo.</p>
-      </div>
+        <p class="hint">Toca un elemento para renombrarlo, cambiarle el tamaño o quitarlo.</p>`)}
 
-      <div class="card">
-        <h2>camerino y catering</h2>
+      ${card("hospitality", "camerino y catering", "", `
         <label class="field"><span>Una cosa por línea</span>
-          <textarea class="lines" data-list="hospitality">${esc(fromLines(m.hospitality))}</textarea></label>
-      </div>
+          <textarea class="lines" data-list="hospitality">${esc(fromLines(m.hospitality))}</textarea></label>`)}
 
-      <div class="card">
-        <h2>contacto y notas</h2>
+      ${card("", "contacto y notas", "", `
         <div id="contacts">${m.contacts.map(contactRow).join("")}</div>
         <div class="row-add"><button type="button" class="btn-ghost sm" data-add="contact">+ contacto</button></div>
-        <label class="field"><span>Nota final del documento</span>
-          <textarea data-doc="notes">${esc(m.notes)}</textarea></label>
-      </div>
+        <div class="field${isOn("notes") ? "" : " off"}" data-block="notes">
+          <div class="field-head"><span>Nota final del documento</span>${sw("notes", true)}</div>
+          <textarea data-doc="notes">${esc(m.notes)}</textarea>
+        </div>`)}
     `;
     renderPlot();
   }
@@ -884,11 +933,14 @@ table.p-chan tr:last-child td { border-bottom: 0; }
       <div><p class="p-sub">${title}</p>
         <ul class="p-list">${arr.map(l => `<li>${esc(l)}</li>`).join("")}</ul></div>` : "";
 
+    const showMon = isOn("monitors") && m.monitors.length;
+    const showPow = isOn("power") && m.power.length;
     const timesArr = [
       m.times.load ? ["Montaje", m.times.load] : null,
       m.times.check ? ["Prueba de sonido", m.times.check] : null,
       m.times.show ? ["Concierto", m.times.show] : null
     ].filter(Boolean);
+    const showTimes = isOn("times") && timesArr.length;
 
     $("view-doc").innerHTML = `
       <article class="paper">
@@ -904,12 +956,12 @@ table.p-chan tr:last-child td { border-bottom: 0; }
         <div class="p-meta">
           <span><b>Versión</b> ${esc(current.version)}</span>
           <span><b>Actualizado</b> ${esc(stamp(current.updated_at).split(" · ")[0])}</span>
-          <span><b>En escenario</b> ${m.members.length} músicos</span>
-          <span><b>Canales</b> ${m.channels.length}</span>
+          ${isOn("members") && m.members.length ? `<span><b>En escenario</b> ${m.members.length} músicos</span>` : ""}
+          ${isOn("channels") && m.channels.length ? `<span><b>Canales</b> ${m.channels.length}</span>` : ""}
           ${lead.email || lead.phone ? `<span><b>Contacto</b> ${esc([lead.email, lead.phone].filter(Boolean).join(" · "))}</span>` : ""}
         </div>
 
-        ${m.members.length ? `
+        ${isOn("members") && m.members.length ? `
         <section class="p-sec">
           <h2>necesidades por músico</h2>
           <div class="p-mems">${m.members.map(x => `
@@ -922,7 +974,7 @@ table.p-chan tr:last-child td { border-bottom: 0; }
             </div>`).join("")}</div>
         </section>` : ""}
 
-        ${m.channels.length ? `
+        ${isOn("channels") && m.channels.length ? `
         <section class="p-sec">
           <h2>input list · ${m.channels.length} canales</h2>
           <table class="p-chan">
@@ -941,7 +993,7 @@ table.p-chan tr:last-child td { border-bottom: 0; }
           </table>
         </section>` : ""}
 
-        ${(m.backlineBand.length || m.backlineVenue.length) ? `
+        ${isOn("backline") && (m.backlineBand.length || m.backlineVenue.length) ? `
         <section class="p-sec">
           <h2>backline</h2>
           <div class="p-cols">
@@ -950,17 +1002,18 @@ table.p-chan tr:last-child td { border-bottom: 0; }
           </div>
         </section>` : ""}
 
-        ${(m.monitors.length || m.power.length || timesArr.length) ? `
+        ${(showMon || showPow || showTimes) ? `
         <section class="p-sec">
-          <h2>monitoraje, corriente y tiempos</h2>
+          <h2>${[showMon ? "monitoraje" : "", showPow ? "corriente" : "", showTimes ? "tiempos" : ""].filter(Boolean).join(", ")}</h2>
           <div class="p-cols three">
-            ${listBlock("Monitores", m.monitors)}
-            ${listBlock("Corriente", m.power)}
-            ${timesArr.length ? `<div><p class="p-sub">Tiempos</p>
+            ${showMon ? listBlock("Monitores", m.monitors) : ""}
+            ${showPow ? listBlock("Corriente", m.power) : ""}
+            ${showTimes ? `<div><p class="p-sub">Tiempos</p>
               <ul class="p-list">${timesArr.map(t => `<li>${t[0]}: <b>${esc(t[1])}</b></li>`).join("")}</ul></div>` : ""}
           </div>
         </section>` : ""}
 
+        ${isOn("stage") ? `
         <section class="p-sec p-stage-sec">
           <h2>plano de escenario${m.stage.width || m.stage.depth
             ? ` · mínimo ${esc(m.stage.width || "?")} × ${esc(m.stage.depth || "?")}` : ""}</h2>
@@ -973,15 +1026,15 @@ table.p-chan tr:last-child td { border-bottom: 0; }
                 ${it.label ? `<span>${esc(it.label)}</span>` : ""}
               </div>`).join("")}
           </div>
-        </section>
+        </section>` : ""}
 
-        ${m.hospitality.length ? `
+        ${isOn("hospitality") && m.hospitality.length ? `
         <section class="p-sec">
           <h2>camerino y catering</h2>
           <ul class="p-list">${m.hospitality.map(l => `<li>${esc(l)}</li>`).join("")}</ul>
         </section>` : ""}
 
-        ${m.notes ? `<p class="p-note">${esc(m.notes)}</p>` : ""}
+        ${isOn("notes") && m.notes ? `<p class="p-note">${esc(m.notes)}</p>` : ""}
 
         <div class="p-foot">
           ${m.contacts.filter(c => c.name || c.phone || c.email).map(c =>
@@ -1085,6 +1138,17 @@ table.p-chan tr:last-child td { border-bottom: 0; }
       const [row] = doc.channels.splice(i, 1);
       doc.channels.splice(j, 0, row);
       renderEditor(); touch();
+    } else if (d.toggle) {
+      const key = d.toggle;
+      doc.off[key] = !doc.off[key];
+      const on = !doc.off[key];
+      // Repintar entero perdería el sitio en el que estabas: solo cambia el switch.
+      btn.classList.toggle("on", on);
+      btn.setAttribute("aria-checked", String(on));
+      btn.querySelector(".sw-txt").textContent = on ? "en el rider" : "fuera";
+      document.querySelector(`[data-card="${key}"]`)?.classList.toggle("off", !on);
+      document.querySelector(`[data-block="${key}"]`)?.classList.toggle("off", !on);
+      touch();
     } else if (btn.id === "sel-del") {
       doc.stage.items = doc.stage.items.filter(i => i.id !== selectedItem);
       selectedItem = null;
