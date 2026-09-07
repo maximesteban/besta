@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex,nofollow,noarchive,nosnippet" />
+<meta name="theme-color" content="#050508" />
+<title>BESTA — rider</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/suite/suite-shell.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
+<script src="/suite/suite.js"></script>
+<style>
+body { visibility: hidden; }
+body.ready { visibility: visible; }
+
+/* ---------- barra de estado / guardado ---------- */
+.saver { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.saver .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.saver.dirty .dot { background: var(--warn); }
+.saver.saving .dot { background: var(--accent); animation: pulse 1s infinite; }
+.saver.saved .dot { background: var(--ok); }
+.saver.error .dot { background: var(--bad); }
+@keyframes pulse { 50% { opacity: .25; } }
+
+.err {
+  background: rgba(255,107,107,.1); border: 1px solid rgba(255,107,107,.35);
+  color: #ffd7d7; border-radius: 11px; padding: 12px 14px; margin-bottom: 20px; font-size: 13.5px;
+}
+.err code { font-family: var(--mono); font-size: 12px; }
+.relogin { background: none; border: 0; color: var(--accent); text-decoration: underline; padding: 0; }
+
+/* ---------- modos ---------- */
+.modes { display: flex; gap: 4px; background: var(--bg-3); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.modes button {
+  border: 0; background: none; color: var(--muted); padding: 6px 13px;
+  border-radius: 8px; font-size: 12.5px; font-weight: 600;
+}
+.modes button.on { background: var(--bg); color: var(--fg); }
+
+.docbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 22px; }
+.docbar select { width: auto; min-width: 190px; }
+.docbar .spacer { flex: 1; }
+
+/* ---------- editor ---------- */
+.card {
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 14px;
+  padding: 18px 18px 6px; margin-bottom: 18px;
+}
+.card > h2 {
+  margin: 0 0 4px; font-size: 12px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+}
+.card > .card-sub { margin: 0 0 16px; font-size: 12.5px; color: var(--muted); }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.grid.two { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+textarea { min-height: 92px; resize: vertical; line-height: 1.5; }
+textarea.lines { font-size: 13.5px; }
+.hint { font-size: 11.5px; color: var(--muted); margin: -6px 0 12px; }
+
+/* ---------- fichas de músico ---------- */
+.mems { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin-bottom: 12px; }
+.mem { background: var(--bg-3); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.mem-head { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+.mem-head .ico { width: 30px; height: 30px; flex: none; color: var(--accent); }
+.mem-head input { padding: 6px 9px; font-size: 13.5px; font-weight: 700; }
+.mem-head .kill { flex: none; width: auto; padding: 4px 8px; font-size: 11px; }
+.mem select { padding: 6px 9px; font-size: 12px; margin-bottom: 7px; }
+.mem textarea { min-height: 118px; font-size: 12.5px; padding: 8px 10px; }
+
+/* ---------- tabla de canales ---------- */
+.tbl-wrap { overflow-x: auto; margin: 0 -4px 12px; padding: 0 4px; }
+table.chan { width: 100%; border-collapse: collapse; min-width: 720px; }
+table.chan th {
+  text-align: left; font-size: 10px; letter-spacing: .13em; text-transform: uppercase;
+  color: var(--muted); font-weight: 600; padding: 0 6px 8px; white-space: nowrap;
+}
+table.chan td { padding: 3px 4px; vertical-align: middle; }
+table.chan td.n {
+  font-family: var(--mono); font-size: 12px; color: var(--muted);
+  text-align: right; width: 34px; padding-right: 8px;
+}
+table.chan input[type=text] { padding: 7px 9px; font-size: 13px; }
+table.chan input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--accent); }
+table.chan td.ph { text-align: center; width: 60px; }
+table.chan td.act { width: 84px; white-space: nowrap; text-align: right; }
+table.chan td.act button {
+  background: none; border: 1px solid var(--line); color: var(--muted);
+  border-radius: 7px; padding: 4px 7px; font-size: 11px; line-height: 1;
+}
+table.chan td.act button:hover { color: var(--fg); border-color: var(--line-strong); }
+table.chan td.act button.kill:hover { color: var(--bad); border-color: rgba(255,107,107,.5); }
+
+.row-add { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.row-add button { width: auto; }
+
+/* ---------- contactos ---------- */
+.contact { display: grid; gap: 8px; grid-template-columns: 1fr 1fr 1fr 1fr auto; margin-bottom: 8px; }
+.contact button { width: auto; padding: 8px 11px; }
+@media (max-width: 720px) { .contact { grid-template-columns: 1fr 1fr; } }
+
+/* ---------- editor de escenario ---------- */
+.plot-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.plot-tools button { width: auto; padding: 7px 11px; font-size: 12px; border-radius: 9px;
+  background: var(--bg-3); border: 1px solid var(--line); color: var(--muted); }
+.plot-tools button:hover { color: var(--fg); border-color: var(--line-strong); }
+.plot-sel {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  background: var(--bg-3); border: 1px solid var(--accent); border-radius: 10px;
+  padding: 9px 11px; margin-bottom: 12px;
+}
+.plot-sel input { width: auto; flex: 1; min-width: 130px; padding: 7px 10px; font-size: 13px; }
+.plot-sel label { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.plot-sel input[type=range] { width: 90px; padding: 0; }
+.plot-sel button { width: auto; padding: 6px 11px; font-size: 12px; }
+
+.plot {
+  position: relative; width: 100%; aspect-ratio: 16 / 10;
+  border: 2px dashed var(--line-strong); border-radius: 14px;
+  background:
+    linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px) 0 0 / 100% 10%,
+    linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px) 0 0 / 10% 100%;
+  overflow: hidden; touch-action: none; margin-bottom: 6px;
+}
+.plot-back, .plot-front {
+  position: absolute; left: 0; right: 0; text-align: center;
+  font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted);
+  pointer-events: none;
+}
+.plot-back { top: 6px; } .plot-front { bottom: 6px; }
+.plot-item {
+  position: absolute; transform: translate(-50%, -50%);
+  display: grid; justify-items: center; gap: 3px; cursor: grab;
+  padding: 4px; border-radius: 9px; border: 1px solid transparent; user-select: none;
+}
+.plot-item.on { border-color: var(--accent); background: rgba(var(--accent-rgb), .1); }
+.plot-item:active { cursor: grabbing; }
+.plot-item svg { display: block; color: var(--fg); }
+.plot-item span {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--fg); white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.7);
+}
+
+/* =========================================================
+   VISTA DOCUMENTO — lo que ve la sala. Papel blanco siempre,
+   aunque la app vaya en oscuro, porque acaba en un PDF.
+   ========================================================= */
+.paper {
+  width: 210mm; max-width: 100%; margin: 0 auto; background: #fff; color: #16141a;
+  padding: 15mm 14mm; border-radius: 4px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  font-size: 10.5pt; line-height: 1.42;
+}
+.paper * { box-sizing: border-box; }
+.p-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.p-head h1 { margin: 0; font-size: 27pt; font-weight: 700; letter-spacing: -.02em; line-height: 1; }
+.p-head .p-logo { width: 108px; height: auto; flex: none; }
+.p-kicker { margin: 4px 0 0; font-size: 9pt; letter-spacing: .16em; text-transform: uppercase; color: #7a7681; }
+.p-rule { height: 2px; background: #16141a; margin: 10px 0 14px; }
+.p-meta { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 8.6pt; color: #55515c; margin-bottom: 16px; }
+.p-meta b { color: #16141a; font-weight: 600; }
+
+.p-sec { margin-bottom: 15px; break-inside: avoid; }
+.p-sec > h2 {
+  margin: 0 0 7px; font-size: 8.6pt; font-weight: 700; letter-spacing: .18em; text-transform: uppercase;
+  color: #16141a; border-bottom: 1px solid #d9d6de; padding-bottom: 4px;
+}
+.p-note { font-size: 8.6pt; color: #6b6772; margin: 6px 0 0; }
+
+.p-mems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+.p-mem { padding: 9px 12px 9px 0; border-right: 1px solid #ddd9e1; break-inside: avoid; }
+.p-mem:nth-child(3n) { border-right: 0; padding-right: 0; }
+.p-mem:nth-child(n+4) { border-top: 1px solid #ddd9e1; }
+.p-mem-head { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.p-mem-head svg { width: 26px; height: 26px; flex: none; color: #16141a; }
+.p-mem-head b { font-size: 10pt; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
+.p-mem-head i { font-style: normal; font-size: 8pt; color: #7a7681; }
+.p-mem ul { margin: 0; padding-left: 15px; }
+.p-mem li { font-size: 9pt; margin-bottom: 1px; }
+
+table.p-chan { width: 100%; border-collapse: collapse; font-size: 8.8pt; }
+table.p-chan th {
+  text-align: left; font-size: 7.4pt; letter-spacing: .12em; text-transform: uppercase;
+  color: #55515c; border-bottom: 1px solid #16141a; padding: 0 6px 4px;
+}
+table.p-chan td { padding: 3.5px 6px; border-bottom: 1px solid #eae7ee; }
+table.p-chan td.n { font-weight: 700; width: 26px; text-align: right; color: #55515c; }
+table.p-chan td.c { text-align: center; width: 46px; }
+table.p-chan tr:last-child td { border-bottom: 0; }
+
+.p-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.p-cols.three { grid-template-columns: repeat(3, 1fr); }
+.p-list { margin: 0; padding-left: 15px; }
+.p-list li { font-size: 9.2pt; margin-bottom: 2px; }
+.p-sub { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #7a7681; margin: 0 0 4px; }
+
+.p-stage {
+  position: relative; width: 100%; aspect-ratio: 16 / 10;
+  border: 1.5px dashed #16141a; border-radius: 8px; margin-top: 6px;
+}
+.p-stage .p-stage-lbl {
+  position: absolute; left: 0; right: 0; text-align: center;
+  font-size: 7.6pt; letter-spacing: .2em; text-transform: uppercase; color: #7a7681;
+}
+.p-stage .back { top: 5px; } .p-stage .front { bottom: 5px; }
+.p-item { position: absolute; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 2px; }
+.p-item svg { display: block; color: #16141a; }
+.p-item span { font-size: 7.4pt; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
+
+.p-foot {
+  margin-top: 18px; padding-top: 9px; border-top: 1px solid #d9d6de;
+  display: flex; flex-wrap: wrap; gap: 4px 20px; font-size: 8.2pt; color: #55515c;
+}
+.p-foot b { color: #16141a; }
+
+/* ---------- impresión ---------- */
+@page { size: A4; margin: 12mm; }
+@media print {
+  html, body { background: #fff !important; }
+  body { visibility: visible !important; }
+  .space-head, .docbar, .no-print, .bs-switch, .bs-sheet, #error { display: none !important; }
+  .wrap { max-width: none; margin: 0; padding: 0; }
+  .paper {
+    width: auto; max-width: none; margin: 0; padding: 0;
+    box-shadow: none; border-radius: 0; font-size: 10pt;
+  }
+  .p-sec, .p-mem, table.p-chan tr { break-inside: avoid; }
+  .p-stage-sec { break-before: page; }
+}
+</style>
+</head>
+<body>
+
+<header class="space-head">
+  <div class="who">
+    <img src="/assets/images/besta_color.png" alt="BESTA">
+    <b>rider</b><i>suite</i>
+  </div>
+  <div class="tools">
+    <div class="saver" id="saver"><span class="dot"></span><span id="saver-txt">cargando…</span></div>
+    <div class="modes" id="modes">
+      <button type="button" data-mode="edit" class="on">editar</button>
+      <button type="button" data-mode="doc">documento</button>
+    </div>
+    <button class="btn-ghost sm" id="print">imprimir / PDF</button>
+    <a class="btn-ghost sm" href="/suite/" style="text-decoration:none">suite</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="error" class="err" hidden></div>
+
+  <div class="docbar no-print">
+    <select id="doc-pick" title="Formato de la banda"></select>
+    <button type="button" class="btn-ghost sm" id="doc-new">+ formato</button>
+    <button type="button" class="btn-ghost sm" id="doc-dup">duplicar</button>
+    <button type="button" class="btn-ghost sm btn-danger" id="doc-del">borrar</button>
+    <span class="spacer"></span>
+    <span class="mono" id="doc-updated"></span>
+  </div>
+
+  <div id="view-edit"></div>
+  <div id="view-doc" hidden></div>
+</main>
+
+<!-- Iconos del escenario. Silueta plana en currentColor: se ve igual en la
+     app (blanco sobre negro) que en el papel (negro sobre blanco). -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+
+  <symbol id="ico-drums" viewBox="0 0 100 100">
+    <g fill="currentColor">
+      <rect x="15" y="30" width="2.5" height="46" rx="1"/>
+      <rect x="82" y="30" width="2.5" height="46" rx="1"/>
+      <ellipse cx="16" cy="29" rx="15" ry="3.4"/>
+      <ellipse cx="83" cy="29" rx="15" ry="3.4"/>
+      <rect x="34" y="30" width="15" height="14" rx="3"/>
+      <rect x="52" y="30" width="15" height="14" rx="3"/>
+      <rect x="12" y="52" width="19" height="13" rx="3"/>
+      <ellipse cx="50" cy="68" rx="25" ry="23"/>
+      <rect x="24" y="86" width="52" height="3" rx="1.5"/>
+    </g>
+  </symbol>
+
+  <symbol id="ico-keys" viewBox="0 0 100 100">
+    <g fill="none" stroke="currentColor" stroke-width="5">
+      <rect x="7" y="35" width="86" height="30" rx="4"/>
+    </g>
+    <g fill="currentColor">
+      <rect x="20" y="38" width="6" height="15" rx="1.5"/>
+      <rect x="33" y="38" width="6" height="15" rx="1.5"/>
+      <rect x="52" y="38" width="6" height="15" rx="1.5"/>
+      <rect x="64" y="38" width="6" height="15" rx="1.5"/>
+      <rect x="76" y="38" width="6" height="15" rx="1.5"/>
+    </g>
+    <g stroke="currentColor" stroke-width="2.5">
+      <path d="M29 54v9M42 39v24M55 54v9M68 54v9M81 39v24"/>
+    </g>
+  </symbol>
+
+  <symbol id="ico-guitar" viewBox="0 0 100 100">
+    <g fill="currentColor" transform="rotate(-35 50 50) translate(50 50) scale(1.08) translate(-50 -50)">
+      <rect x="41" y="2" width="17" height="11" rx="2.5"/>
+      <rect x="46" y="11" width="8" height="34" rx="2"/>
+      <path d="M50 44c11 0 18 7 18 15 0 5-3 8-3 12s4 7 4 13c0 9-8 15-19 15s-19-6-19-15c0-6 4-9 4-13s-3-7-3-12c0-8 7-15 18-15z"/>
+    </g>
+  </symbol>
+
+  <symbol id="ico-bass" viewBox="0 0 100 100">
+    <g fill="currentColor" transform="rotate(-35 50 50) translate(50 50) scale(1.08) translate(-50 -50)">
+      <rect x="38" y="2" width="21" height="9" rx="2.5"/>
+      <rect x="47" y="9" width="7" height="42" rx="2"/>
+      <path d="M50 50c9 0 15 6 15 13 0 4-3 6-3 10s4 6 4 11c0 8-7 13-16 13s-16-5-16-13c0-5 4-7 4-11s-3-6-3-10c0-7 6-13 15-13z"/>
+    </g>
+  </symbol>
+
+  <symbol id="ico-mic" viewBox="0 0 100 100">
+    <g fill="currentColor">
+      <rect x="41" y="5" width="18" height="32" rx="9"/>
+      <rect x="46.5" y="35" width="7" height="48" rx="2"/>
+      <rect x="27" y="83" width="46" height="6" rx="3"/>
+    </g>
+  </symbol>
+
+  <symbol id="ico-wedge" viewBox="0 0 100 100">
+    <path d="M10 80 L28 40 L72 40 L90 80 Z" fill="currentColor"/>
+    <g stroke="#888" stroke-width="2.5" opacity=".55">
+      <path d="M30 52h40M26 62h48M22 72h56"/>
+    </g>
+  </symbol>
+
+  <symbol id="ico-amp" viewBox="0 0 100 100">
+    <rect x="12" y="24" width="76" height="56" rx="5" fill="currentColor"/>
+    <g stroke="#888" stroke-width="3" opacity=".5">
+      <path d="M22 42h56M22 52h56M22 62h56"/>
+    </g>
+  </symbol>
+
+  <symbol id="ico-power" viewBox="0 0 100 100">
+    <g fill="currentColor">
+      <rect x="36" y="8" width="8" height="22" rx="3"/>
+      <rect x="56" y="8" width="8" height="22" rx="3"/>
+      <path d="M24 30h52v16c0 15-11 26-26 26S24 61 24 46z"/>
+      <rect x="46" y="70" width="8" height="22" rx="3"/>
+    </g>
+  </symbol>
+
+  <symbol id="ico-di" viewBox="0 0 100 100">
+    <rect x="16" y="26" width="68" height="48" rx="6" fill="none" stroke="currentColor" stroke-width="6"/>
+    <text x="50" y="60" text-anchor="middle" font-family="'Space Grotesk',sans-serif"
+          font-size="26" font-weight="700" fill="currentColor">DI</text>
+  </symbol>
+
+  <symbol id="ico-label" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="9" fill="currentColor"/>
+  </symbol>
+
+</defs></svg>
+
+<script>
+/* =========================================================
+   BESTA · suite → rider técnico
+   Un documento por formato de banda. Se edita aquí y sale
+   por la impresora tal cual lo verá la sala (vista documento).
+   ========================================================= */
+(function () {
+  "use strict";
+
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  /* Las listas se editan como texto, una cosa por línea: es lo más rápido
+     de escribir en el iPad y lo que menos estorba al copiar y pegar. */
+  const toLines = txt => String(txt || "").split("\n").map(l => l.trim()).filter(Boolean);
+  const fromLines = arr => (Array.isArray(arr) ? arr : []).join("\n");
+  const uid = () => Math.random().toString(36).slice(2, 9);
+
+  const ICONS = [
+    { kind: "drums",  label: "batería" },
+    { kind: "keys",   label: "teclado" },
+    { kind: "guitar", label: "guitarra" },
+    { kind: "bass",   label: "bajo" },
+    { kind: "mic",    label: "micro" },
+    { kind: "wedge",  label: "cuña" },
+    { kind: "amp",    label: "ampli" },
+    { kind: "di",     label: "DI" },
+    { kind: "power",  label: "corriente" },
+    { kind: "label",  label: "etiqueta" }
+  ];
+  const ICON_KINDS = new Set(ICONS.map(i => i.kind));
+
+  /* ---------------------------------------------------------
+     Documento por defecto: el rider que la banda ya mandaba,
+     pasado a limpio y completado con lo que pide cualquier
+     técnico de sala (input list, monitores, corriente, tiempos).
+     --------------------------------------------------------- */
+  function defaultDoc() {
+    return {
+      subtitle: "Pop-rock · Castelldefels, Barcelona",
+      members: [
+        { id: uid(), kind: "mic", role: "Voz", name: "Maxim", needs: [
+          "Micro vocal + pie de micro jirafa",
+          "1 envío de monitor"
+        ]},
+        { id: uid(), kind: "drums", role: "Batería", name: "Víctor", needs: [
+          "Batería completa: bombo, caja, toms, hi-hat, platos y herrajes",
+          "Micrófonos de batería a criterio de la sala",
+          "1 envío de monitor"
+        ]},
+        { id: uid(), kind: "bass", role: "Bajo", name: "Lars", needs: [
+          "Alargo de jack hasta la pedalera",
+          "Jack de pedalera a mesa (o caja DI)",
+          "1 envío de monitor"
+        ]},
+        { id: uid(), kind: "keys", role: "Piano", name: "Carlinhos", needs: [
+          "2 jacks (salida estéreo) a mesa",
+          "Micro de coros + pie de micro",
+          "1 toma de corriente",
+          "1 envío de monitor"
+        ]},
+        { id: uid(), kind: "guitar", role: "Guitarra", name: "Pau", needs: [
+          "Alargo de jack hasta la pedalera",
+          "Jack de pedalera a mesa (o caja DI)",
+          "Pie de guitarra",
+          "1 toma de corriente",
+          "1 envío de monitor"
+        ]},
+        { id: uid(), kind: "guitar", role: "Guitarra", name: "Albert", needs: [
+          "Jack de guitarra a pedalera y de pedalera a mesa",
+          "Micro de coros + pie de micro",
+          "Pie de guitarra",
+          "1 toma de corriente",
+          "1 envío de monitor"
+        ]}
+      ],
+      channels: [
+        { id: uid(), src: "Bombo",              mic: "Micro de bombo",            stand: "Pie corto",  ph: false, note: "" },
+        { id: uid(), src: "Caja",               mic: "Dinámico",                  stand: "Pinza o pie corto", ph: false, note: "" },
+        { id: uid(), src: "Hi-hat",             mic: "Condensador",               stand: "Pie corto",  ph: true,  note: "Opcional" },
+        { id: uid(), src: "Tom aire",           mic: "Dinámico",                  stand: "Pinza",      ph: false, note: "" },
+        { id: uid(), src: "Tom base",           mic: "Dinámico",                  stand: "Pinza",      ph: false, note: "" },
+        { id: uid(), src: "Overhead L",         mic: "Condensador",               stand: "Pie jirafa", ph: true,  note: "" },
+        { id: uid(), src: "Overhead R",         mic: "Condensador",               stand: "Pie jirafa", ph: true,  note: "" },
+        { id: uid(), src: "Bajo · Lars",        mic: "DI",                        stand: "—",          ph: false, note: "Salida de pedalera" },
+        { id: uid(), src: "Piano L · Carlinhos",mic: "DI",                        stand: "—",          ph: false, note: "Salida estéreo" },
+        { id: uid(), src: "Piano R · Carlinhos",mic: "DI",                        stand: "—",          ph: false, note: "Salida estéreo" },
+        { id: uid(), src: "Guitarra · Pau",     mic: "DI",                        stand: "—",          ph: false, note: "Salida de pedalera" },
+        { id: uid(), src: "Guitarra · Albert",  mic: "DI",                        stand: "—",          ph: false, note: "Salida de pedalera" },
+        { id: uid(), src: "Voz · Maxim",        mic: "Dinámico vocal (SM58 o similar)", stand: "Pie jirafa", ph: false, note: "Voz principal" },
+        { id: uid(), src: "Coros · Carlinhos",  mic: "Dinámico vocal",            stand: "Pie jirafa", ph: false, note: "" },
+        { id: uid(), src: "Coros · Albert",     mic: "Dinámico vocal",            stand: "Pie jirafa", ph: false, note: "" }
+      ],
+      backlineBand: [
+        "Guitarras eléctricas, bajo y pedaleras",
+        "Piano y su soporte",
+        "Baquetas"
+      ],
+      backlineVenue: [
+        "Batería completa: bombo, caja, toms, hi-hat, platos y herrajes",
+        "P.A. adecuada a la sala con técnico de sonido",
+        "Mesa de al menos 16 canales",
+        "5 cajas DI",
+        "Micrófonos y pies según el input list",
+        "6 cuñas de monitor"
+      ],
+      monitors: [
+        "6 cuñas en escenario",
+        "Mínimo 4 envíos independientes",
+        "1 · Voz (Maxim)",
+        "2 · Guitarras (Pau y Albert)",
+        "3 · Piano y bajo",
+        "4 · Batería"
+      ],
+      power: [
+        "4 tomas de corriente (schuko) en el escenario",
+        "Piano, guitarra de Pau, guitarra de Albert y zona de batería"
+      ],
+      times: { load: "60 min", check: "45 min", show: "60–75 min" },
+      hospitality: [
+        "Agua para 6 personas en escenario y camerino",
+        "Camerino cerrado con espejo y percha",
+        "Picoteo o catering ligero según el horario",
+        "Aparcamiento para una furgoneta cerca de la carga",
+        "Toallas de mano"
+      ],
+      contacts: [
+        { role: "Contratación", name: "BESTA", phone: "", email: "info@besta.es" },
+        { role: "Responsable técnico", name: "", phone: "", email: "" }
+      ],
+      notes: "Este rider es orientativo: si algo no encaja en vuestra sala, escribidnos y lo ajustamos sin problema.",
+      stage: {
+        width: "6 m",
+        depth: "4 m",
+        items: [
+          { id: uid(), kind: "drums",  label: "Batería",         x: 50, y: 18, s: 1.15 },
+          { id: uid(), kind: "keys",   label: "Piano",           x: 15, y: 50, s: 1 },
+          { id: uid(), kind: "mic",    label: "Coros",           x: 27, y: 52, s: .75 },
+          { id: uid(), kind: "guitar", label: "Guitarra Pau",    x: 48, y: 54, s: 1 },
+          { id: uid(), kind: "bass",   label: "Bajo",            x: 82, y: 50, s: 1 },
+          { id: uid(), kind: "guitar", label: "Guitarra Albert", x: 31, y: 82, s: 1 },
+          { id: uid(), kind: "mic",    label: "Coros",           x: 43, y: 84, s: .75 },
+          { id: uid(), kind: "mic",    label: "Voz",             x: 62, y: 84, s: .9 }
+        ]
+      }
+    };
+  }
+
+  /* Rellena lo que falte: los documentos guardados antes de añadir un
+     bloque nuevo no deben romper el pintado. */
+  function normalize(raw) {
+    const d = Object.assign(defaultDocShape(), raw && typeof raw === "object" ? raw : {});
+    d.members = (Array.isArray(d.members) ? d.members : []).map(m => ({
+      id: m.id || uid(),
+      kind: ICON_KINDS.has(m.kind) ? m.kind : "mic",
+      role: m.role || "",
+      name: m.name || "",
+      needs: Array.isArray(m.needs) ? m.needs : toLines(m.needs)
+    }));
+    d.channels = (Array.isArray(d.channels) ? d.channels : []).map(c => ({
+      id: c.id || uid(),
+      src: c.src || "", mic: c.mic || "", stand: c.stand || "",
+      ph: !!c.ph, note: c.note || ""
+    }));
+    ["backlineBand", "backlineVenue", "monitors", "power", "hospitality"].forEach(k => {
+      d[k] = Array.isArray(d[k]) ? d[k] : toLines(d[k]);
+    });
+    d.contacts = (Array.isArray(d.contacts) ? d.contacts : []).map(c => ({
+      role: c.role || "", name: c.name || "", phone: c.phone || "", email: c.email || ""
+    }));
+    d.times = Object.assign({ load: "", check: "", show: "" }, d.times || {});
+    const st = d.stage && typeof d.stage === "object" ? d.stage : {};
+    d.stage = {
+      width: st.width || "", depth: st.depth || "",
+      items: (Array.isArray(st.items) ? st.items : []).map(it => ({
+        id: it.id || uid(),
+        kind: ICON_KINDS.has(it.kind) ? it.kind : "label",
+        label: it.label || "",
+        x: clamp(Number(it.x) || 50, 2, 98),
+        y: clamp(Number(it.y) || 50, 2, 98),
+        s: clamp(Number(it.s) || 1, .5, 2)
+      }))
+    };
+    return d;
+  }
+  function defaultDocShape() {
+    return {
+      subtitle: "", members: [], channels: [], backlineBand: [], backlineVenue: [],
+      monitors: [], power: [], times: { load: "", check: "", show: "" },
+      hospitality: [], contacts: [], notes: "", stage: { width: "", depth: "", items: [] }
+    };
+  }
+  const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+
+  /* ---------------- estado ---------------- */
+  let supa = null;
+  let docs = [];          // filas de rider_docs
+  let current = null;     // fila abierta
+  let doc = null;         // current.data ya normalizado
+  let mode = "edit";
+  let saveTimer = null;
+  let selectedItem = null;
+
+  function slugify(s) {
+    return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "rider-" + uid();
+  }
+
+  function showError(html) {
+    const el = $("error");
+    el.innerHTML = html || "";
+    el.hidden = !html;
+  }
+
+  function setSaver(state, text) {
+    const el = $("saver");
+    el.className = "saver " + state;
+    $("saver-txt").textContent = text;
+  }
+
+  function stamp(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) +
+      " · " + d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  /* ---------------- carga y guardado ---------------- */
+  async function load() {
+    showError("");
+    const { data, error } = await supa.from("rider_docs")
+      .select("*").eq("archived", false)
+      .order("position", { ascending: true }).order("created_at", { ascending: true });
+
+    if (error) {
+      if (error.code === "42P01" || error.code === "PGRST205" || /does not exist|schema cache/i.test(error.message)) {
+        showError("Falta la migración del rider por aplicar. Lanza <code>supabase db push</code> y recarga.");
+      } else if (/jwt|token/i.test(error.message)) {
+        showError("La sesión guardada ya no vale (<code>" + esc(error.message) + "</code>). " +
+          "<button type=\"button\" class=\"relogin\" onclick=\"BestaSuite.logout()\">Vuelve a entrar</button>.");
+      } else {
+        showError("Error cargando: <code>" + esc(error.message) + "</code>");
+      }
+      setSaver("error", "sin cargar");
+      return;
+    }
+
+    docs = data || [];
+    if (!docs.length) {
+      // Primera vez: sembramos el rider de la banda completa.
+      const seeded = await createDoc("Banda completa (6 músicos)", defaultDoc(), "2026.1");
+      if (!seeded) return;
+    }
+    open(docs[0].id);
+  }
+
+  async function createDoc(name, data, version) {
+    const row = {
+      slug: slugify(name) + "-" + uid().slice(0, 4),
+      name, version: version || "1",
+      position: docs.length,
+      data
+    };
+    const { data: created, error } = await supa.from("rider_docs").insert(row).select().single();
+    if (error) { showError("No se pudo crear el formato: <code>" + esc(error.message) + "</code>"); return null; }
+    docs.push(created);
+    return created;
+  }
+
+  function open(id) {
+    current = docs.find(d => d.id === id) || docs[0] || null;
+    if (!current) return;
+    doc = normalize(current.data);
+    selectedItem = null;
+    renderPicker();
+    render();
+    setSaver("saved", "guardado " + stamp(current.updated_at));
+  }
+
+  function touch() {
+    setSaver("dirty", "sin guardar");
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 1200);
+  }
+
+  async function save() {
+    if (!current) return;
+    clearTimeout(saveTimer);
+    setSaver("saving", "guardando…");
+    const { data, error } = await supa.from("rider_docs")
+      .update({ name: current.name, version: current.version, data: doc })
+      .eq("id", current.id).select().single();
+    if (error) {
+      setSaver("error", "no se pudo guardar");
+      showError("No se pudo guardar: <code>" + esc(error.message) + "</code>");
+      return;
+    }
+    showError("");
+    Object.assign(current, data);
+    const i = docs.findIndex(d => d.id === current.id);
+    if (i >= 0) docs[i] = current;
+    setSaver("saved", "guardado " + stamp(current.updated_at));
+    $("doc-updated").textContent = "actualizado " + stamp(current.updated_at);
+  }
+
+  /* ---------------- utilidades de pintado ---------------- */
+  const icon = (kind, size) =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 100 100"><use href="#ico-${kind}"/></svg>`;
+
+  const iconOptions = sel => ICONS.map(i =>
+    `<option value="${i.kind}"${i.kind === sel ? " selected" : ""}>${i.label}</option>`).join("");
+
+  function renderPicker() {
+    const sel = $("doc-pick");
+    sel.innerHTML = docs.map(d =>
+      `<option value="${d.id}"${current && d.id === current.id ? " selected" : ""}>${esc(d.name)} · v${esc(d.version)}</option>`
+    ).join("");
+    $("doc-del").disabled = docs.length < 2;
+  }
+
+  function render() {
+    const edit = mode === "edit";
+    $("view-edit").hidden = !edit;
+    $("view-doc").hidden = edit;
+    if (edit) renderEditor(); else renderDoc();
+    $("doc-updated").textContent = current ? "actualizado " + stamp(current.updated_at) : "";
+    document.querySelectorAll("#modes button").forEach(b =>
+      b.classList.toggle("on", b.dataset.mode === mode));
+  }
+
+  /* ---------------- editor ---------------- */
+  function renderEditor() {
+    const m = doc;
+    $("view-edit").innerHTML = `
+      <div class="card">
+        <h2>documento</h2>
+        <div class="grid">
+          <label class="field"><span>Formato</span>
+            <input type="text" data-row="name" value="${esc(current.name)}" placeholder="Banda completa"></label>
+          <label class="field"><span>Versión</span>
+            <input type="text" data-row="version" value="${esc(current.version)}" placeholder="2026.1"></label>
+          <label class="field"><span>Subtítulo</span>
+            <input type="text" data-doc="subtitle" value="${esc(m.subtitle)}" placeholder="Pop-rock · Castelldefels"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>músicos y necesidades</h2>
+        <p class="card-sub">Una necesidad por línea. Es lo que la sala lee de un vistazo.</p>
+        <div class="mems">${m.members.map(memCard).join("")}</div>
+        <div class="row-add"><button type="button" class="btn-ghost sm" data-add="member">+ músico</button></div>
+      </div>
+
+      <div class="card">
+        <h2>input list</h2>
+        <p class="card-sub">Los canales van numerados solos por el orden de la tabla.</p>
+        <div class="tbl-wrap">
+          <table class="chan">
+            <thead><tr>
+              <th></th><th>Fuente</th><th>Micro / DI</th><th>Soporte</th><th>48V</th><th>Notas</th><th></th>
+            </tr></thead>
+            <tbody>${m.channels.map(chanRow).join("")}</tbody>
+          </table>
+        </div>
+        <div class="row-add"><button type="button" class="btn-ghost sm" data-add="channel">+ canal</button></div>
+      </div>
+
+      <div class="card">
+        <h2>backline</h2>
+        <div class="grid two">
+          <label class="field"><span>Lo que lleva la banda</span>
+            <textarea class="lines" data-list="backlineBand">${esc(fromLines(m.backlineBand))}</textarea></label>
+          <label class="field"><span>Lo que pedimos a la sala</span>
+            <textarea class="lines" data-list="backlineVenue">${esc(fromLines(m.backlineVenue))}</textarea></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>monitores, corriente y tiempos</h2>
+        <div class="grid two">
+          <label class="field"><span>Monitoraje</span>
+            <textarea class="lines" data-list="monitors">${esc(fromLines(m.monitors))}</textarea></label>
+          <label class="field"><span>Corriente</span>
+            <textarea class="lines" data-list="power">${esc(fromLines(m.power))}</textarea></label>
+        </div>
+        <div class="grid">
+          <label class="field"><span>Montaje</span>
+            <input type="text" data-times="load" value="${esc(m.times.load)}" placeholder="60 min"></label>
+          <label class="field"><span>Prueba de sonido</span>
+            <input type="text" data-times="check" value="${esc(m.times.check)}" placeholder="45 min"></label>
+          <label class="field"><span>Concierto</span>
+            <input type="text" data-times="show" value="${esc(m.times.show)}" placeholder="60–75 min"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>escenario</h2>
+        <p class="card-sub">Arrastra cada elemento a su sitio. El fondo del escenario es la parte de arriba.</p>
+        <div class="grid">
+          <label class="field"><span>Ancho mínimo</span>
+            <input type="text" data-stage="width" value="${esc(m.stage.width)}" placeholder="6 m"></label>
+          <label class="field"><span>Fondo mínimo</span>
+            <input type="text" data-stage="depth" value="${esc(m.stage.depth)}" placeholder="4 m"></label>
+        </div>
+        <div class="plot-tools">
+          ${ICONS.map(i => `<button type="button" data-add-item="${i.kind}">+ ${i.label}</button>`).join("")}
+        </div>
+        <div id="plot-sel"></div>
+        <div class="plot" id="plot">
+          <span class="plot-back">fondo del escenario</span>
+          <span class="plot-front">público</span>
+        </div>
+        <p class="hint">Toca un elemento para renombrarlo, cambiarle el tamaño o quitarlo.</p>
+      </div>
+
+      <div class="card">
+        <h2>camerino y catering</h2>
+        <label class="field"><span>Una cosa por línea</span>
+          <textarea class="lines" data-list="hospitality">${esc(fromLines(m.hospitality))}</textarea></label>
+      </div>
+
+      <div class="card">
+        <h2>contacto y notas</h2>
+        <div id="contacts">${m.contacts.map(contactRow).join("")}</div>
+        <div class="row-add"><button type="button" class="btn-ghost sm" data-add="contact">+ contacto</button></div>
+        <label class="field"><span>Nota final del documento</span>
+          <textarea data-doc="notes">${esc(m.notes)}</textarea></label>
+      </div>
+    `;
+    renderPlot();
+  }
+
+  function memCard(mem) {
+    return `
+      <div class="mem" data-mem="${mem.id}">
+        <div class="mem-head">
+          <span class="ico">${icon(mem.kind, 30)}</span>
+          <input type="text" data-f="name" value="${esc(mem.name)}" placeholder="Nombre">
+          <button type="button" class="btn-ghost sm kill" data-del="member" title="Quitar">×</button>
+        </div>
+        <input type="text" data-f="role" value="${esc(mem.role)}" placeholder="Instrumento" style="padding:6px 9px;font-size:12.5px;margin-bottom:7px">
+        <select data-f="kind">${iconOptions(mem.kind)}</select>
+        <textarea data-f="needs" placeholder="Qué necesita, una cosa por línea">${esc(fromLines(mem.needs))}</textarea>
+      </div>`;
+  }
+
+  function chanRow(c, i) {
+    return `
+      <tr data-ch="${c.id}">
+        <td class="n">${i + 1}</td>
+        <td><input type="text" data-f="src" value="${esc(c.src)}" placeholder="Bombo"></td>
+        <td><input type="text" data-f="mic" value="${esc(c.mic)}" placeholder="Dinámico / DI"></td>
+        <td><input type="text" data-f="stand" value="${esc(c.stand)}" placeholder="Pie jirafa"></td>
+        <td class="ph"><input type="checkbox" data-f="ph"${c.ph ? " checked" : ""}></td>
+        <td><input type="text" data-f="note" value="${esc(c.note)}" placeholder=""></td>
+        <td class="act">
+          <button type="button" data-move="-1" title="Subir">↑</button>
+          <button type="button" data-move="1" title="Bajar">↓</button>
+          <button type="button" class="kill" data-del="channel" title="Quitar">×</button>
+        </td>
+      </tr>`;
+  }
+
+  function contactRow(c, i) {
+    return `
+      <div class="contact" data-ct="${i}">
+        <input type="text" data-f="role" value="${esc(c.role)}" placeholder="Rol">
+        <input type="text" data-f="name" value="${esc(c.name)}" placeholder="Nombre">
+        <input type="text" data-f="phone" value="${esc(c.phone)}" placeholder="Teléfono">
+        <input type="text" data-f="email" value="${esc(c.email)}" placeholder="Email">
+        <button type="button" class="btn-ghost sm btn-danger" data-del="contact">×</button>
+      </div>`;
+  }
+
+  /* ---------------- escenario ---------------- */
+  function renderPlot() {
+    const plot = $("plot");
+    if (!plot) return;
+    plot.querySelectorAll(".plot-item").forEach(el => el.remove());
+    doc.stage.items.forEach(it => plot.appendChild(plotItem(it)));
+    renderPlotSel();
+  }
+
+  function plotItem(it) {
+    const el = document.createElement("div");
+    el.className = "plot-item" + (selectedItem === it.id ? " on" : "");
+    el.dataset.item = it.id;
+    el.style.left = it.x + "%";
+    el.style.top = it.y + "%";
+    const size = Math.round(46 * it.s);
+    el.innerHTML = (it.kind === "label" ? "" : icon(it.kind, size)) +
+      (it.label ? `<span>${esc(it.label)}</span>` : "");
+    return el;
+  }
+
+  function renderPlotSel() {
+    const box = $("plot-sel");
+    if (!box) return;
+    const it = doc.stage.items.find(i => i.id === selectedItem);
+    if (!it) { box.innerHTML = ""; return; }
+    box.innerHTML = `
+      <div class="plot-sel">
+        <input type="text" id="sel-label" value="${esc(it.label)}" placeholder="Etiqueta">
+        <select id="sel-kind" style="width:auto;padding:7px 10px;font-size:13px">${iconOptions(it.kind)}</select>
+        <label>tamaño <input type="range" id="sel-size" min="0.5" max="2" step="0.05" value="${it.s}"></label>
+        <button type="button" class="btn-ghost sm btn-danger" id="sel-del">quitar</button>
+        <button type="button" class="btn-ghost sm" id="sel-done">listo</button>
+      </div>`;
+  }
+
+  function selectItem(id) {
+    selectedItem = id;
+    document.querySelectorAll(".plot-item").forEach(el =>
+      el.classList.toggle("on", el.dataset.item === id));
+    renderPlotSel();
+  }
+
+  /* ---------------- vista documento ---------------- */
+  function renderDoc() {
+    const m = doc;
+    const lead = m.contacts.find(c => c.email || c.phone) || {};
+    const listBlock = (title, arr) => arr.length ? `
+      <div><p class="p-sub">${title}</p>
+        <ul class="p-list">${arr.map(l => `<li>${esc(l)}</li>`).join("")}</ul></div>` : "";
+
+    const timesArr = [
+      m.times.load ? ["Montaje", m.times.load] : null,
+      m.times.check ? ["Prueba de sonido", m.times.check] : null,
+      m.times.show ? ["Concierto", m.times.show] : null
+    ].filter(Boolean);
+
+    $("view-doc").innerHTML = `
+      <article class="paper">
+        <div class="p-head">
+          <div>
+            <h1>RIDER TÉCNICO</h1>
+            <p class="p-kicker">${esc(current.name)}${m.subtitle ? " · " + esc(m.subtitle) : ""}</p>
+          </div>
+          <img class="p-logo" src="/assets/images/besta.png" alt="BESTA">
+        </div>
+        <div class="p-rule"></div>
+
+        <div class="p-meta">
+          <span><b>Versión</b> ${esc(current.version)}</span>
+          <span><b>Actualizado</b> ${esc(stamp(current.updated_at).split(" · ")[0])}</span>
+          <span><b>En escenario</b> ${m.members.length} músicos</span>
+          <span><b>Canales</b> ${m.channels.length}</span>
+          ${lead.email || lead.phone ? `<span><b>Contacto</b> ${esc([lead.email, lead.phone].filter(Boolean).join(" · "))}</span>` : ""}
+        </div>
+
+        ${m.members.length ? `
+        <section class="p-sec">
+          <h2>necesidades por músico</h2>
+          <div class="p-mems">${m.members.map(x => `
+            <div class="p-mem">
+              <div class="p-mem-head">
+                ${icon(x.kind, 26)}
+                <div><b>${esc(x.role || x.name)}</b>${x.role && x.name ? ` <i>${esc(x.name)}</i>` : ""}</div>
+              </div>
+              <ul>${x.needs.map(n => `<li>${esc(n)}</li>`).join("")}</ul>
+            </div>`).join("")}</div>
+        </section>` : ""}
+
+        ${m.channels.length ? `
+        <section class="p-sec">
+          <h2>input list · ${m.channels.length} canales</h2>
+          <table class="p-chan">
+            <thead><tr>
+              <th></th><th>Fuente</th><th>Micro / DI</th><th>Soporte</th><th class="c">48V</th><th>Notas</th>
+            </tr></thead>
+            <tbody>${m.channels.map((c, i) => `
+              <tr>
+                <td class="n">${i + 1}</td>
+                <td>${esc(c.src)}</td>
+                <td>${esc(c.mic)}</td>
+                <td>${esc(c.stand)}</td>
+                <td class="c">${c.ph ? "sí" : "—"}</td>
+                <td>${esc(c.note)}</td>
+              </tr>`).join("")}</tbody>
+          </table>
+        </section>` : ""}
+
+        ${(m.backlineBand.length || m.backlineVenue.length) ? `
+        <section class="p-sec">
+          <h2>backline</h2>
+          <div class="p-cols">
+            ${listBlock("Lo lleva la banda", m.backlineBand)}
+            ${listBlock("Lo pone la sala", m.backlineVenue)}
+          </div>
+        </section>` : ""}
+
+        ${(m.monitors.length || m.power.length || timesArr.length) ? `
+        <section class="p-sec">
+          <h2>monitoraje, corriente y tiempos</h2>
+          <div class="p-cols three">
+            ${listBlock("Monitores", m.monitors)}
+            ${listBlock("Corriente", m.power)}
+            ${timesArr.length ? `<div><p class="p-sub">Tiempos</p>
+              <ul class="p-list">${timesArr.map(t => `<li>${t[0]}: <b>${esc(t[1])}</b></li>`).join("")}</ul></div>` : ""}
+          </div>
+        </section>` : ""}
+
+        <section class="p-sec p-stage-sec">
+          <h2>plano de escenario${m.stage.width || m.stage.depth
+            ? ` · mínimo ${esc(m.stage.width || "?")} × ${esc(m.stage.depth || "?")}` : ""}</h2>
+          <div class="p-stage">
+            <span class="p-stage-lbl back">fondo del escenario</span>
+            <span class="p-stage-lbl front">público</span>
+            ${m.stage.items.map(it => `
+              <div class="p-item" style="left:${it.x}%;top:${it.y}%">
+                ${it.kind === "label" ? "" : icon(it.kind, Math.round(40 * it.s))}
+                ${it.label ? `<span>${esc(it.label)}</span>` : ""}
+              </div>`).join("")}
+          </div>
+        </section>
+
+        ${m.hospitality.length ? `
+        <section class="p-sec">
+          <h2>camerino y catering</h2>
+          <ul class="p-list">${m.hospitality.map(l => `<li>${esc(l)}</li>`).join("")}</ul>
+        </section>` : ""}
+
+        ${m.notes ? `<p class="p-note">${esc(m.notes)}</p>` : ""}
+
+        <div class="p-foot">
+          ${m.contacts.filter(c => c.name || c.phone || c.email).map(c =>
+            `<span><b>${esc(c.role || c.name)}</b> ${esc([c.name && c.role ? c.name : "", c.phone, c.email].filter(Boolean).join(" · "))}</span>`
+          ).join("")}
+          <span style="margin-left:auto">besta.es</span>
+        </div>
+      </article>`;
+  }
+
+  /* ---------------- eventos del editor ---------------- */
+  function onEdit(e) {
+    const t = e.target;
+    const d = t.dataset;
+    let hit = true;
+
+    if (d.row) {
+      current[d.row] = t.value;
+      const opt = $("doc-pick").querySelector(`option[value="${current.id}"]`);
+      if (opt) opt.textContent = current.name + " · v" + current.version;
+    } else if (d.doc) {
+      doc[d.doc] = t.value;
+    } else if (d.list) {
+      doc[d.list] = toLines(t.value);
+    } else if (d.times) {
+      doc.times[d.times] = t.value;
+    } else if (d.stage) {
+      doc.stage[d.stage] = t.value;
+    } else if (t.closest("[data-mem]")) {
+      const card = t.closest("[data-mem]");
+      const mem = doc.members.find(x => x.id === card.dataset.mem);
+      if (!mem) return;
+      if (d.f === "needs") mem.needs = toLines(t.value);
+      else if (d.f === "kind") { mem.kind = t.value; card.querySelector(".ico").innerHTML = icon(mem.kind, 30); }
+      else mem[d.f] = t.value;
+    } else if (t.closest("[data-ch]")) {
+      const row = t.closest("[data-ch]");
+      const ch = doc.channels.find(x => x.id === row.dataset.ch);
+      if (!ch) return;
+      ch[d.f] = d.f === "ph" ? t.checked : t.value;
+    } else if (t.closest("[data-ct]")) {
+      const row = t.closest("[data-ct]");
+      const ct = doc.contacts[Number(row.dataset.ct)];
+      if (!ct) return;
+      ct[d.f] = t.value;
+    } else if (t.id === "sel-label" || t.id === "sel-kind" || t.id === "sel-size") {
+      const it = doc.stage.items.find(i => i.id === selectedItem);
+      if (!it) return;
+      if (t.id === "sel-label") it.label = t.value;
+      if (t.id === "sel-kind") it.kind = t.value;
+      if (t.id === "sel-size") it.s = clamp(Number(t.value) || 1, .5, 2);
+      const el = document.querySelector(`.plot-item[data-item="${it.id}"]`);
+      if (el) el.replaceWith(plotItem(it));
+    } else {
+      hit = false;
+    }
+    if (hit) touch();
+  }
+
+  function onEditClick(e) {
+    const btn = e.target.closest("button");
+    if (!btn) {
+      if (e.target.id === "plot") selectItem(null);
+      return;
+    }
+    const d = btn.dataset;
+
+    if (d.add === "member") {
+      doc.members.push({ id: uid(), kind: "mic", role: "", name: "", needs: [] });
+      renderEditor(); touch();
+      focusLast("[data-mem] input[data-f='name']");
+    } else if (d.add === "channel") {
+      doc.channels.push({ id: uid(), src: "", mic: "", stand: "", ph: false, note: "" });
+      renderEditor(); touch();
+      focusLast("[data-ch] input[data-f='src']");
+    } else if (d.add === "contact") {
+      doc.contacts.push({ role: "", name: "", phone: "", email: "" });
+      renderEditor(); touch();
+      focusLast("[data-ct] input[data-f='role']");
+    } else if (d.addItem) {
+      const it = { id: uid(), kind: d.addItem, label: "", x: 50, y: 50, s: 1 };
+      doc.stage.items.push(it);
+      renderPlot(); selectItem(it.id); touch();
+      $("sel-label")?.focus();
+    } else if (d.del === "member") {
+      const id = btn.closest("[data-mem]").dataset.mem;
+      doc.members = doc.members.filter(x => x.id !== id);
+      renderEditor(); touch();
+    } else if (d.del === "channel") {
+      const id = btn.closest("[data-ch]").dataset.ch;
+      doc.channels = doc.channels.filter(x => x.id !== id);
+      renderEditor(); touch();
+    } else if (d.del === "contact") {
+      doc.contacts.splice(Number(btn.closest("[data-ct]").dataset.ct), 1);
+      renderEditor(); touch();
+    } else if (d.move) {
+      const id = btn.closest("[data-ch]").dataset.ch;
+      const i = doc.channels.findIndex(x => x.id === id);
+      const j = i + Number(d.move);
+      if (i < 0 || j < 0 || j >= doc.channels.length) return;
+      const [row] = doc.channels.splice(i, 1);
+      doc.channels.splice(j, 0, row);
+      renderEditor(); touch();
+    } else if (btn.id === "sel-del") {
+      doc.stage.items = doc.stage.items.filter(i => i.id !== selectedItem);
+      selectedItem = null;
+      renderPlot(); touch();
+    } else if (btn.id === "sel-done") {
+      selectItem(null);
+    }
+  }
+
+  function focusLast(sel) {
+    const all = $("view-edit").querySelectorAll(sel);
+    const el = all[all.length - 1];
+    if (el) { el.focus(); el.scrollIntoView({ block: "center", behavior: "smooth" }); }
+  }
+
+  /* ---------------- arrastrar en el plano ---------------- */
+  let drag = null;
+  document.addEventListener("pointerdown", e => {
+    if (mode !== "edit") return;
+    const el = e.target.closest(".plot-item");
+    if (!el) return;
+    const it = doc.stage.items.find(i => i.id === el.dataset.item);
+    const plot = $("plot");
+    if (!it || !plot) return;
+    selectItem(it.id);
+    const node = document.querySelector(`.plot-item[data-item="${it.id}"]`);
+    drag = { it, node, rect: plot.getBoundingClientRect(), moved: false };
+    try { node.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault();
+  });
+  document.addEventListener("pointermove", e => {
+    if (!drag) return;
+    const r = drag.rect;
+    drag.it.x = Math.round(clamp(((e.clientX - r.left) / r.width) * 100, 2, 98) * 10) / 10;
+    drag.it.y = Math.round(clamp(((e.clientY - r.top) / r.height) * 100, 2, 98) * 10) / 10;
+    drag.node.style.left = drag.it.x + "%";
+    drag.node.style.top = drag.it.y + "%";
+    drag.moved = true;
+  });
+  document.addEventListener("pointerup", () => {
+    if (!drag) return;
+    if (drag.moved) touch();
+    drag = null;
+  });
+
+  /* ---------------- barra superior ---------------- */
+  $("modes").addEventListener("click", e => {
+    const b = e.target.closest("button[data-mode]");
+    if (!b || b.dataset.mode === mode) return;
+    mode = b.dataset.mode;
+    render();
+  });
+
+  $("print").addEventListener("click", async () => {
+    if (mode !== "doc") { mode = "doc"; render(); }
+    await save();
+    window.print();
+  });
+
+  $("doc-pick").addEventListener("change", async e => {
+    await save();
+    open(e.target.value);
+  });
+
+  $("doc-new").addEventListener("click", async () => {
+    await save();
+    const blank = normalize({
+      subtitle: doc.subtitle,
+      contacts: doc.contacts.map(c => Object.assign({}, c)),
+      stage: { width: doc.stage.width, depth: doc.stage.depth, items: [] }
+    });
+    const created = await createDoc("Formato nuevo", blank, "1");
+    if (created) { renderPicker(); open(created.id); }
+  });
+
+  $("doc-dup").addEventListener("click", async () => {
+    await save();
+    const copy = await createDoc(current.name + " (copia)", JSON.parse(JSON.stringify(doc)), current.version);
+    if (copy) { renderPicker(); open(copy.id); }
+  });
+
+  $("doc-del").addEventListener("click", async () => {
+    if (docs.length < 2) return;
+    if (!confirm(`¿Archivar el formato "${current.name}"? Deja de salir en el selector.`)) return;
+    const { error } = await supa.from("rider_docs").update({ archived: true }).eq("id", current.id);
+    if (error) { showError("No se pudo archivar: <code>" + esc(error.message) + "</code>"); return; }
+    docs = docs.filter(d => d.id !== current.id);
+    open(docs[0].id);
+  });
+
+  document.addEventListener("keydown", e => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); save(); }
+  });
+
+  /* Nadie debería perder un cambio por cerrar la pestaña a destiempo. */
+  window.addEventListener("beforeunload", e => {
+    if ($("saver").classList.contains("dirty") || $("saver").classList.contains("saving")) {
+      e.preventDefault(); e.returnValue = "";
+    }
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && $("saver").classList.contains("dirty")) save();
+  });
+
+  $("view-edit").addEventListener("input", onEdit);
+  $("view-edit").addEventListener("change", onEdit);
+  $("view-edit").addEventListener("click", onEditClick);
+
+  /* ---------------- arranque ---------------- */
+  (async function () {
+    await BestaSuite.guard();
+    document.body.classList.add("ready");
+    BestaSuite.mountNav({ active: "rider" });
+    supa = await BestaSuite.client();
+    await load();
+  })();
+})();
+</script>
+</body>
+</html>

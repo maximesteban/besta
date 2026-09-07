@@ -39,6 +39,15 @@
       status: "live"
     },
     {
+      id: "rider",
+      name: "rider",
+      href: "/suite/rider.html",
+      tagline: "rider técnico y plano de escenario",
+      desc: "El documento que se manda a la sala: necesidades por músico, input list, backline y escenario, listo para PDF.",
+      glyph: "▤",
+      status: "live"
+    },
+    {
       id: "finanzas",
       name: "finanzas",
       href: "/suite/finanzas.html",
