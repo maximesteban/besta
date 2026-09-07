@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex,nofollow,noarchive,nosnippet" />
+<meta name="theme-color" content="#050508" />
+<title>BESTA — presupuestos</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicons/favicon-32x32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/suite/suite-shell.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
+<script src="/suite/suite.js"></script>
+<style>
+body { visibility: hidden; }
+body.ready { visibility: visible; }
+
+.saver { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.saver .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.saver.dirty .dot { background: var(--warn); }
+.saver.saving .dot { background: var(--accent); animation: pulse 1s infinite; }
+.saver.saved .dot { background: var(--ok); }
+.saver.error .dot { background: var(--bad); }
+@keyframes pulse { 50% { opacity: .25; } }
+
+.err {
+  background: rgba(255,107,107,.1); border: 1px solid rgba(255,107,107,.35);
+  color: #ffd7d7; border-radius: 11px; padding: 12px 14px; margin-bottom: 20px; font-size: 13.5px;
+}
+.err code { font-family: var(--mono); font-size: 12px; }
+.relogin { background: none; border: 0; color: var(--accent); text-decoration: underline; padding: 0; }
+
+.modes { display: flex; gap: 4px; background: var(--bg-3); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.modes button { border: 0; background: none; color: var(--muted); padding: 6px 13px; border-radius: 8px; font-size: 12.5px; font-weight: 600; }
+.modes button.on { background: var(--bg); color: var(--fg); }
+
+/* ---------- listado ---------- */
+.q-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 20px; }
+.q-bar input[type=search] { width: auto; flex: 1; min-width: 200px; }
+.q-bar .spacer { flex: 1; }
+.q-list { display: grid; gap: 9px; }
+.q-row {
+  display: grid; gap: 12px; align-items: center;
+  grid-template-columns: 128px 1fr 118px 108px 92px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 13px 15px; text-align: left; width: 100%; color: var(--fg);
+}
+.q-row:hover { border-color: var(--line-strong); }
+.q-row .num { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.q-row .cli { font-weight: 600; }
+.q-row .cli small { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); }
+.q-row .money { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.q-empty { color: var(--muted); font-size: 13.5px; padding: 22px 2px; }
+.badge {
+  display: inline-block; padding: 4px 9px; border-radius: 999px;
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700;
+  border: 1px solid var(--line-strong); color: var(--muted);
+}
+.badge.borrador  { color: var(--muted); }
+.badge.enviado   { color: var(--warn);  border-color: rgba(244,211,94,.45); }
+.badge.aceptado  { color: var(--ok);    border-color: rgba(95,214,165,.45); }
+.badge.rechazado { color: var(--bad);   border-color: rgba(255,107,107,.4); }
+@media (max-width: 760px) {
+  .q-row { grid-template-columns: 1fr auto; }
+  .q-row .num, .q-row .date { display: none; }
+}
+
+/* ---------- editor ---------- */
+.card { background: var(--bg-2); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 6px; margin-bottom: 18px; }
+.card h2 { margin: 0 0 4px; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+.card .card-sub { margin: 0 0 16px; font-size: 12.5px; color: var(--muted); }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.grid.two { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+textarea { min-height: 84px; resize: vertical; line-height: 1.5; font-size: 13.5px; }
+
+.tbl-wrap { overflow-x: auto; margin: 0 -4px 12px; padding: 0 4px; }
+table.lines { width: 100%; border-collapse: collapse; min-width: 660px; }
+table.lines th {
+  text-align: left; font-size: 10px; letter-spacing: .13em; text-transform: uppercase;
+  color: var(--muted); font-weight: 600; padding: 0 6px 8px; white-space: nowrap;
+}
+table.lines th.r, table.lines td.r { text-align: right; }
+table.lines td { padding: 3px 4px; vertical-align: middle; }
+table.lines input { padding: 7px 9px; font-size: 13px; }
+table.lines input.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.lines td.qty { width: 92px; } table.lines td.price { width: 122px; }
+table.lines td.sum { width: 106px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+table.lines td.act { width: 84px; white-space: nowrap; text-align: right; }
+table.lines td.act button {
+  background: none; border: 1px solid var(--line); color: var(--muted);
+  border-radius: 7px; padding: 4px 7px; font-size: 11px; line-height: 1;
+}
+table.lines td.act button:hover { color: var(--fg); border-color: var(--line-strong); }
+table.lines td.act button.kill:hover { color: var(--bad); border-color: rgba(255,107,107,.5); }
+.row-add { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.row-add button { width: auto; }
+
+.totals { display: grid; gap: 6px; justify-content: end; margin-bottom: 14px; }
+.totals div { display: grid; grid-template-columns: auto 118px; gap: 18px; font-size: 13.5px; color: var(--muted); }
+.totals div b { color: var(--fg); text-align: right; font-variant-numeric: tabular-nums; }
+.totals div.big { font-size: 17px; color: var(--fg); font-weight: 700; padding-top: 6px; border-top: 1px solid var(--line); }
+.totals div.big b { color: var(--accent); }
+
+/* =========================================================
+   VISTA DOCUMENTO
+   ========================================================= */
+.paper {
+  width: 210mm; max-width: 100%; margin: 0 auto; background: #fff; color: #16141a;
+  padding: 16mm 15mm; border-radius: 4px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  font-size: 10.5pt; line-height: 1.45;
+}
+.paper * { box-sizing: border-box; }
+.p-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.p-head h1 { margin: 0; font-size: 25pt; font-weight: 700; letter-spacing: -.02em; line-height: 1; }
+.p-head .p-logo { width: 104px; height: auto; flex: none; }
+.p-kicker { margin: 5px 0 0; font-size: 9pt; letter-spacing: .16em; text-transform: uppercase; color: #7a7681; }
+.p-rule { height: 2px; background: #16141a; margin: 11px 0 16px; }
+.p-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px; }
+.p-sub { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #7a7681; margin: 0 0 4px; }
+.p-party p { margin: 0; font-size: 9.4pt; }
+.p-party p b { font-size: 10.4pt; }
+.p-sec { margin-bottom: 16px; break-inside: avoid; }
+.p-sec > h2 {
+  margin: 0 0 7px; font-size: 8.6pt; font-weight: 700; letter-spacing: .18em; text-transform: uppercase;
+  border-bottom: 1px solid #d9d6de; padding-bottom: 4px;
+}
+table.p-lines { width: 100%; border-collapse: collapse; font-size: 9.4pt; }
+table.p-lines th {
+  text-align: left; font-size: 7.4pt; letter-spacing: .12em; text-transform: uppercase;
+  color: #55515c; border-bottom: 1px solid #16141a; padding: 0 7px 4px;
+}
+table.p-lines th.r, table.p-lines td.r { text-align: right; }
+table.p-lines td { padding: 5px 7px; border-bottom: 1px solid #eae7ee; vertical-align: top; }
+table.p-lines td.r { font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.p-lines td small { display: block; color: #6b6772; font-size: 8.2pt; }
+.p-tot { display: flex; justify-content: flex-end; margin-top: 10px; }
+.p-tot table { border-collapse: collapse; min-width: 250px; font-size: 9.6pt; }
+.p-tot td { padding: 3.5px 0; }
+.p-tot td.r { text-align: right; font-variant-numeric: tabular-nums; padding-left: 26px; }
+.p-tot tr.big td { font-size: 13pt; font-weight: 700; border-top: 1.5px solid #16141a; padding-top: 7px; }
+.p-list { margin: 0; padding-left: 15px; }
+.p-list li { font-size: 9.2pt; margin-bottom: 2px; }
+.p-note { font-size: 8.8pt; color: #55515c; margin: 4px 0 0; }
+.p-foot {
+  margin-top: 20px; padding-top: 9px; border-top: 1px solid #d9d6de;
+  display: flex; flex-wrap: wrap; gap: 4px 20px; font-size: 8.2pt; color: #55515c;
+}
+.p-foot b { color: #16141a; }
+
+@page { size: A4; margin: 12mm; }
+@media print {
+  html, body { background: #fff !important; }
+  body { visibility: visible !important; }
+  .space-head, .q-bar, .no-print, .bs-switch, .bs-sheet, #error { display: none !important; }
+  .wrap { max-width: none; margin: 0; padding: 0; }
+  .paper { width: auto; max-width: none; margin: 0; padding: 0; box-shadow: none; border-radius: 0; font-size: 10pt; }
+  .p-sec, table.p-lines tr { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+<header class="space-head">
+  <div class="who">
+    <img src="/assets/images/besta_color.png" alt="BESTA">
+    <b>presupuestos</b><i>suite</i>
+  </div>
+  <div class="tools">
+    <div class="saver" id="saver" hidden><span class="dot"></span><span id="saver-txt"></span></div>
+    <div class="modes" id="modes" hidden>
+      <button type="button" data-mode="edit" class="on">editar</button>
+      <button type="button" data-mode="doc">documento</button>
+    </div>
+    <button class="btn-ghost sm" id="print" hidden>imprimir / PDF</button>
+    <button class="btn-ghost sm" id="back" hidden>← presupuestos</button>
+    <a class="btn-ghost sm" href="/suite/" style="text-decoration:none">suite</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="error" class="err" hidden></div>
+  <div id="view-list"></div>
+  <div id="view-edit" hidden></div>
+  <div id="view-doc" hidden></div>
+</main>
+
+<script>
+/* =========================================================
+   BESTA · suite → presupuestos
+   Un presupuesto es una foto de lo que se le mandó a un cliente:
+   sus conceptos, sus precios y sus condiciones. Se edita aquí y sale
+   por la impresora tal cual lo verá el promotor (vista documento).
+   ========================================================= */
+(function () {
+  "use strict";
+
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  const toLines = txt => String(txt || "").split("\n").map(l => l.trim()).filter(Boolean);
+  const fromLines = arr => (Array.isArray(arr) ? arr : []).join("\n");
+  const uid = () => Math.random().toString(36).slice(2, 9);
+  const num = v => { const n = Number(String(v).replace(",", ".")); return isFinite(n) ? n : 0; };
+
+  const EUR = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
+  const eur = v => EUR.format(num(v));
+  const STATUS = ["borrador", "enviado", "aceptado", "rechazado"];
+
+  /* Plantilla de un presupuesto nuevo. Sin precios: los pone la banda,
+     que es la única que sabe lo que cobra en cada sitio. */
+  function template(prev) {
+    const carry = prev || {};
+    return {
+      issuer: Object.assign({
+        name: "BESTA", legal: "", nif: "", address: "",
+        email: "info@besta.es", phone: "", iban: ""
+      }, carry.issuer || {}),
+      client: { name: "", contact: "", nif: "", address: "", email: "", phone: "" },
+      gig: { date: "", time: "", venue: "", city: "", format: "Banda completa (6 músicos)", duration: "", notes: "" },
+      lines: [
+        { id: uid(), concept: "Actuación en directo", detail: "Banda completa (6 músicos)", qty: 1, price: 0 },
+        { id: uid(), concept: "Desplazamiento", detail: "Ida y vuelta desde Castelldefels", qty: 1, price: 0 }
+      ],
+      discount: 0,
+      vat: carry.vat === undefined ? 21 : carry.vat,
+      irpf: carry.irpf === undefined ? 0 : carry.irpf,
+      validity: carry.validity || "30 días",
+      conditions: carry.conditions && carry.conditions.length ? carry.conditions.slice() : [
+        "No incluye P.A., técnico de sonido ni luces, salvo que se indique en los conceptos.",
+        "La banda aporta el backline detallado en el rider técnico.",
+        "Forma de pago y señal: a convenir.",
+        "Al confirmar la fecha se envían el rider técnico y el contrato."
+      ],
+      notes: ""
+    };
+  }
+
+  function normalize(raw) {
+    const t = template();
+    const d = Object.assign({}, t, raw && typeof raw === "object" ? raw : {});
+    d.issuer = Object.assign({}, t.issuer, d.issuer || {});
+    d.client = Object.assign({}, t.client, d.client || {});
+    d.gig = Object.assign({}, t.gig, d.gig || {});
+    d.lines = (Array.isArray(d.lines) ? d.lines : []).map(l => ({
+      id: l.id || uid(),
+      concept: l.concept || "", detail: l.detail || "",
+      qty: num(l.qty), price: num(l.price)
+    }));
+    d.discount = num(d.discount);
+    d.vat = num(d.vat);
+    d.irpf = num(d.irpf);
+    d.validity = d.validity || "";
+    d.conditions = Array.isArray(d.conditions) ? d.conditions : toLines(d.conditions);
+    d.notes = d.notes || "";
+    return d;
+  }
+
+  /* El dinero, en un solo sitio: si algún día cambia el IVA o entra
+     retención, se toca aquí y cuadra el editor y el documento. */
+  function money(d) {
+    const gross = d.lines.reduce((s, l) => s + l.qty * l.price, 0);
+    const base = Math.max(0, gross - d.discount);
+    const vat = base * d.vat / 100;
+    const irpf = base * d.irpf / 100;
+    return { gross, base, vat, irpf, total: base + vat - irpf };
+  }
+
+  /* ---------------- estado ---------------- */
+  let supa = null;
+  let quotes = [];
+  let current = null;   // fila abierta
+  let doc = null;       // current.data normalizado
+  let view = "list";    // list | edit | doc
+  let saveTimer = null;
+  let query = "";
+
+  function showError(html) {
+    const el = $("error");
+    el.innerHTML = html || "";
+    el.hidden = !html;
+  }
+  function setSaver(state, text) {
+    $("saver").className = "saver " + state;
+    $("saver-txt").textContent = text;
+  }
+  function stamp(iso, withTime) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const day = d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+    return withTime ? day + " · " + d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : day;
+  }
+  function dateEs(ymd) {
+    if (!ymd) return "";
+    const [y, m, dd] = ymd.split("-");
+    if (!y || !m || !dd) return ymd;
+    return new Date(`${y}-${m}-${dd}T12:00:00`).toLocaleDateString("es-ES",
+      { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  }
+
+  /* Numeración por año: BESTA-2026-001. Se puede corregir a mano. */
+  function nextNumber() {
+    const year = new Date().getFullYear();
+    const pre = `BESTA-${year}-`;
+    const used = quotes
+      .filter(q => (q.number || "").startsWith(pre))
+      .map(q => parseInt(q.number.slice(pre.length), 10))
+      .filter(n => !isNaN(n));
+    const n = (used.length ? Math.max.apply(null, used) : 0) + 1;
+    return pre + String(n).padStart(3, "0");
+  }
+
+  /* ---------------- carga y guardado ---------------- */
+  async function load() {
+    showError("");
+    const { data, error } = await supa.from("booking_quotes")
+      .select("*").eq("archived", false).order("created_at", { ascending: false });
+    if (error) {
+      if (error.code === "42P01" || error.code === "PGRST205" || /does not exist|schema cache/i.test(error.message)) {
+        showError("Falta la migración de presupuestos por aplicar. Lanza <code>supabase db push</code> y recarga.");
+      } else if (/jwt|token/i.test(error.message)) {
+        showError("La sesión guardada ya no vale (<code>" + esc(error.message) + "</code>). " +
+          "<button type=\"button\" class=\"relogin\" onclick=\"BestaSuite.logout()\">Vuelve a entrar</button>.");
+      } else {
+        showError("Error cargando: <code>" + esc(error.message) + "</code>");
+      }
+      quotes = [];
+    } else {
+      quotes = data || [];
+    }
+    render();
+  }
+
+  async function createQuote() {
+    // El emisor y las condiciones se heredan del último: se escriben una vez.
+    const prev = quotes.length ? normalize(quotes[0].data) : null;
+    const data = template(prev);
+    const row = { number: nextNumber(), status: "borrador", client: "", total: 0, data };
+    const { data: created, error } = await supa.from("booking_quotes").insert(row).select().single();
+    if (error) { showError("No se pudo crear: <code>" + esc(error.message) + "</code>"); return null; }
+    quotes.unshift(created);
+    return created;
+  }
+
+  function open(id) {
+    current = quotes.find(q => q.id === id);
+    if (!current) return;
+    doc = normalize(current.data);
+    view = "edit";
+    render();
+    setSaver("saved", "guardado " + stamp(current.updated_at, true));
+  }
+
+  function touch() {
+    setSaver("dirty", "sin guardar");
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 1200);
+  }
+
+  async function save() {
+    if (!current) return;
+    clearTimeout(saveTimer);
+    setSaver("saving", "guardando…");
+    const patch = {
+      number: current.number,
+      status: current.status,
+      client: doc.client.name || "",
+      event_date: doc.gig.date || null,
+      total: Number(money(doc).total.toFixed(2)),
+      data: doc
+    };
+    const { data, error } = await supa.from("booking_quotes")
+      .update(patch).eq("id", current.id).select().single();
+    if (error) {
+      setSaver("error", "no se pudo guardar");
+      showError("No se pudo guardar: <code>" + esc(error.message) + "</code>");
+      return;
+    }
+    showError("");
+    Object.assign(current, data);
+    const i = quotes.findIndex(q => q.id === current.id);
+    if (i >= 0) quotes[i] = current;
+    setSaver("saved", "guardado " + stamp(current.updated_at, true));
+  }
+
+  /* ---------------- pintado ---------------- */
+  function render() {
+    const inDoc = view === "doc", inEdit = view === "edit";
+    $("view-list").hidden = view !== "list";
+    $("view-edit").hidden = !inEdit;
+    $("view-doc").hidden = !inDoc;
+    $("saver").hidden = view === "list";
+    $("modes").hidden = view === "list";
+    $("print").hidden = view === "list";
+    $("back").hidden = view === "list";
+    document.querySelectorAll("#modes button").forEach(b =>
+      b.classList.toggle("on", (b.dataset.mode === "doc") === inDoc));
+    if (view === "list") renderList();
+    else if (inEdit) renderEditor();
+    else renderDoc();
+  }
+
+  function renderList() {
+    const q = query.trim().toLowerCase();
+    const rows = quotes.filter(x => !q ||
+      (x.number + " " + (x.client || "") + " " + JSON.stringify(x.data && x.data.gig || {}))
+        .toLowerCase().includes(q));
+
+    $("view-list").innerHTML = `
+      <div class="q-bar no-print">
+        <input type="search" id="q" value="${esc(query)}" placeholder="buscar por número, cliente o sala…">
+        <button type="button" class="btn-ghost sm" id="new-quote">+ presupuesto</button>
+      </div>
+      ${rows.length ? `<div class="q-list">${rows.map(listRow).join("")}</div>`
+        : `<p class="q-empty">${quotes.length
+            ? "Ningún presupuesto coincide con la búsqueda."
+            : "Todavía no hay presupuestos. Crea el primero y quedará de plantilla para los siguientes."}</p>`}
+    `;
+  }
+
+  function listRow(q) {
+    const g = (q.data && q.data.gig) || {};
+    const where = [g.venue, g.city].filter(Boolean).join(" · ");
+    return `
+      <button type="button" class="q-row" data-open="${q.id}">
+        <span class="num">${esc(q.number)}</span>
+        <span class="cli">${esc(q.client || "Sin cliente")}${where ? `<small>${esc(where)}</small>` : ""}</span>
+        <span class="date mono">${esc(g.date ? stamp(g.date + "T12:00:00") : "sin fecha")}</span>
+        <span class="money">${eur(q.total)}</span>
+        <span><span class="badge ${esc(q.status)}">${esc(q.status)}</span></span>
+      </button>`;
+  }
+
+  function renderEditor() {
+    const d = doc;
+    const field = (label, path, value, ph, type) => `
+      <label class="field"><span>${label}</span>
+        <input type="${type || "text"}" data-path="${path}" value="${esc(value)}" placeholder="${esc(ph || "")}"></label>`;
+
+    $("view-edit").innerHTML = `
+      <div class="card">
+        <h2>presupuesto</h2>
+        <div class="grid">
+          <label class="field"><span>Número</span>
+            <input type="text" data-row="number" value="${esc(current.number)}"></label>
+          <label class="field"><span>Estado</span>
+            <select data-row="status">${STATUS.map(s =>
+              `<option value="${s}"${s === current.status ? " selected" : ""}>${s}</option>`).join("")}</select></label>
+          ${field("Validez de la oferta", "validity", d.validity, "30 días")}
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>cliente</h2>
+        <p class="card-sub">A quién se le manda. Sale en la cabecera del documento.</p>
+        <div class="grid">
+          ${field("Nombre o razón social", "client.name", d.client.name, "Sala / ayuntamiento / promotor")}
+          ${field("Persona de contacto", "client.contact", d.client.contact, "")}
+          ${field("NIF / CIF", "client.nif", d.client.nif, "")}
+          ${field("Email", "client.email", d.client.email, "")}
+          ${field("Teléfono", "client.phone", d.client.phone, "")}
+          ${field("Dirección", "client.address", d.client.address, "")}
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>el bolo</h2>
+        <div class="grid">
+          ${field("Fecha", "gig.date", d.gig.date, "", "date")}
+          ${field("Hora", "gig.time", d.gig.time, "22:00")}
+          ${field("Sala o evento", "gig.venue", d.gig.venue, "Festa Major")}
+          ${field("Ciudad", "gig.city", d.gig.city, "Castelldefels")}
+          ${field("Formato", "gig.format", d.gig.format, "Banda completa (6 músicos)")}
+          ${field("Duración", "gig.duration", d.gig.duration, "60–75 min")}
+        </div>
+        <label class="field"><span>Notas del bolo (solo internas)</span>
+          <textarea data-path="gig.notes" placeholder="Lo que no va en el papel">${esc(d.gig.notes)}</textarea></label>
+      </div>
+
+      <div class="card">
+        <h2>conceptos</h2>
+        <p class="card-sub">Cantidad × precio. Los importes se calculan solos.</p>
+        <div class="tbl-wrap">
+          <table class="lines">
+            <thead><tr>
+              <th>Concepto</th><th>Detalle</th><th class="r">Cant.</th><th class="r">Precio</th><th class="r">Importe</th><th></th>
+            </tr></thead>
+            <tbody>${d.lines.map(lineRow).join("")}</tbody>
+          </table>
+        </div>
+        <div class="row-add"><button type="button" class="btn-ghost sm" data-add="line">+ concepto</button></div>
+
+        <div class="grid">
+          ${field("Descuento (€)", "discount", d.discount, "0", "number")}
+          ${field("IVA (%)", "vat", d.vat, "21", "number")}
+          ${field("Retención IRPF (%)", "irpf", d.irpf, "0", "number")}
+        </div>
+
+        <div class="totals">${totalsBlocks()}</div>
+      </div>
+
+      <div class="card">
+        <h2>quién factura</h2>
+        <p class="card-sub">Se escribe una vez: el siguiente presupuesto lo hereda.</p>
+        <div class="grid">
+          ${field("Nombre comercial", "issuer.name", d.issuer.name, "BESTA")}
+          ${field("Razón social", "issuer.legal", d.issuer.legal, "")}
+          ${field("NIF / CIF", "issuer.nif", d.issuer.nif, "")}
+          ${field("Email", "issuer.email", d.issuer.email, "info@besta.es")}
+          ${field("Teléfono", "issuer.phone", d.issuer.phone, "")}
+          ${field("Dirección", "issuer.address", d.issuer.address, "")}
+          ${field("IBAN", "issuer.iban", d.issuer.iban, "")}
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>condiciones y notas</h2>
+        <div class="grid two">
+          <label class="field"><span>Condiciones (una por línea)</span>
+            <textarea data-list="conditions">${esc(fromLines(d.conditions))}</textarea></label>
+          <label class="field"><span>Nota final</span>
+            <textarea data-path="notes" placeholder="Lo que quieras añadir al final del documento">${esc(d.notes)}</textarea></label>
+        </div>
+        <div class="row-add">
+          <button type="button" class="btn-ghost sm" id="dup-quote">duplicar presupuesto</button>
+          <button type="button" class="btn-ghost sm btn-danger" id="del-quote">archivar</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function lineRow(l) {
+    return `
+      <tr data-line="${l.id}">
+        <td><input type="text" data-f="concept" value="${esc(l.concept)}" placeholder="Actuación en directo"></td>
+        <td><input type="text" data-f="detail" value="${esc(l.detail)}" placeholder="Detalle opcional"></td>
+        <td class="qty"><input type="number" class="num" step="0.5" data-f="qty" value="${esc(l.qty)}"></td>
+        <td class="price"><input type="number" class="num" step="0.01" data-f="price" value="${esc(l.price)}"></td>
+        <td class="sum">${eur(l.qty * l.price)}</td>
+        <td class="act">
+          <button type="button" data-move="-1" title="Subir">↑</button>
+          <button type="button" data-move="1" title="Bajar">↓</button>
+          <button type="button" class="kill" data-del="line" title="Quitar">×</button>
+        </td>
+      </tr>`;
+  }
+
+  function renderDoc() {
+    const d = doc, m = money(d);
+    const party = (title, p) => `
+      <div class="p-party">
+        <p class="p-sub">${title}</p>
+        <p><b>${esc(p.legal || p.name || "—")}</b></p>
+        ${p.legal && p.name && p.legal !== p.name ? `<p>${esc(p.name)}</p>` : ""}
+        ${p.contact ? `<p>${esc(p.contact)}</p>` : ""}
+        ${p.nif ? `<p>NIF ${esc(p.nif)}</p>` : ""}
+        ${p.address ? `<p>${esc(p.address)}</p>` : ""}
+        ${[p.email, p.phone].filter(Boolean).length ? `<p>${esc([p.email, p.phone].filter(Boolean).join(" · "))}</p>` : ""}
+      </div>`;
+
+    const gigBits = [
+      d.gig.date ? ["Fecha", dateEs(d.gig.date) + (d.gig.time ? ` · ${d.gig.time}` : "")] : null,
+      (d.gig.venue || d.gig.city) ? ["Lugar", [d.gig.venue, d.gig.city].filter(Boolean).join(" · ")] : null,
+      d.gig.format ? ["Formato", d.gig.format] : null,
+      d.gig.duration ? ["Duración", d.gig.duration] : null
+    ].filter(Boolean);
+
+    $("view-doc").innerHTML = `
+      <article class="paper">
+        <div class="p-head">
+          <div>
+            <h1>PRESUPUESTO</h1>
+            <p class="p-kicker">${esc(current.number)} · ${esc(stamp(current.created_at))}${
+              d.validity ? ` · válido ${esc(d.validity)}` : ""}</p>
+          </div>
+          <img class="p-logo" src="/assets/images/besta.png" alt="BESTA">
+        </div>
+        <div class="p-rule"></div>
+
+        <div class="p-parties">
+          ${party("De", d.issuer)}
+          ${party("Para", d.client)}
+        </div>
+
+        ${gigBits.length ? `
+        <section class="p-sec">
+          <h2>el concierto</h2>
+          <ul class="p-list">${gigBits.map(b => `<li>${b[0]}: <b>${esc(b[1])}</b></li>`).join("")}</ul>
+        </section>` : ""}
+
+        <section class="p-sec">
+          <h2>conceptos</h2>
+          <table class="p-lines">
+            <thead><tr>
+              <th>Concepto</th><th class="r">Cant.</th><th class="r">Precio</th><th class="r">Importe</th>
+            </tr></thead>
+            <tbody>${d.lines.filter(l => l.concept || l.price).map(l => `
+              <tr>
+                <td>${esc(l.concept)}${l.detail ? `<small>${esc(l.detail)}</small>` : ""}</td>
+                <td class="r">${esc(l.qty)}</td>
+                <td class="r">${eur(l.price)}</td>
+                <td class="r">${eur(l.qty * l.price)}</td>
+              </tr>`).join("")}</tbody>
+          </table>
+
+          <div class="p-tot"><table>
+            ${d.discount ? `<tr><td>Descuento</td><td class="r">−${eur(d.discount)}</td></tr>` : ""}
+            <tr><td>Base imponible</td><td class="r">${eur(m.base)}</td></tr>
+            <tr><td>IVA ${d.vat}%</td><td class="r">${eur(m.vat)}</td></tr>
+            ${d.irpf ? `<tr><td>Retención IRPF ${d.irpf}%</td><td class="r">−${eur(m.irpf)}</td></tr>` : ""}
+            <tr class="big"><td>Total</td><td class="r">${eur(m.total)}</td></tr>
+          </table></div>
+        </section>
+
+        ${d.conditions.length ? `
+        <section class="p-sec">
+          <h2>condiciones</h2>
+          <ul class="p-list">${d.conditions.map(c => `<li>${esc(c)}</li>`).join("")}</ul>
+        </section>` : ""}
+
+        ${d.notes ? `<p class="p-note">${esc(d.notes)}</p>` : ""}
+
+        <div class="p-foot">
+          ${d.issuer.iban ? `<span><b>Pago</b> ${esc(d.issuer.iban)}</span>` : ""}
+          ${d.issuer.email ? `<span><b>Contacto</b> ${esc(d.issuer.email)}${
+            d.issuer.phone ? " · " + esc(d.issuer.phone) : ""}</span>` : ""}
+          <span style="margin-left:auto">besta.es</span>
+        </div>
+      </article>`;
+  }
+
+  /* Los totales se repintan solos al teclear un precio: repintar el editor
+     entero te sacaría del campo en el que estás. */
+  function totalsBlocks() {
+    const d = doc, m = money(d);
+    return `
+      <div><span>Suma de conceptos</span><b>${eur(m.gross)}</b></div>
+      ${d.discount ? `<div><span>Descuento</span><b>−${eur(d.discount)}</b></div>` : ""}
+      <div><span>Base imponible</span><b>${eur(m.base)}</b></div>
+      <div><span>IVA ${d.vat}%</span><b>${eur(m.vat)}</b></div>
+      ${d.irpf ? `<div><span>Retención IRPF ${d.irpf}%</span><b>−${eur(m.irpf)}</b></div>` : ""}
+      <div class="big"><span>Total</span><b>${eur(m.total)}</b></div>`;
+  }
+
+  function setPath(obj, path, value) {
+    const parts = path.split(".");
+    let o = obj;
+    for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]];
+    o[parts[parts.length - 1]] = value;
+  }
+
+  /* ---------------- eventos ---------------- */
+  function onEdit(e) {
+    const t = e.target, d = t.dataset;
+    let hit = true;
+
+    if (d.row) {
+      current[d.row] = t.value;
+    } else if (d.path) {
+      const numeric = ["discount", "vat", "irpf"].includes(d.path);
+      setPath(doc, d.path, numeric ? num(t.value) : t.value);
+      if (numeric) $("view-edit").querySelector(".totals").innerHTML = totalsBlocks();
+    } else if (d.list) {
+      doc[d.list] = toLines(t.value);
+    } else if (t.closest("[data-line]")) {
+      const tr = t.closest("[data-line]");
+      const line = doc.lines.find(l => l.id === tr.dataset.line);
+      if (!line) return;
+      line[d.f] = (d.f === "qty" || d.f === "price") ? num(t.value) : t.value;
+      tr.querySelector(".sum").textContent = eur(line.qty * line.price);
+      $("view-edit").querySelector(".totals").innerHTML = totalsBlocks();
+    } else {
+      hit = false;
+    }
+    if (hit) touch();
+  }
+
+  function onEditClick(e) {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const d = btn.dataset;
+
+    if (d.add === "line") {
+      doc.lines.push({ id: uid(), concept: "", detail: "", qty: 1, price: 0 });
+      renderEditor(); touch();
+      const all = $("view-edit").querySelectorAll("[data-line] input[data-f='concept']");
+      all[all.length - 1]?.focus();
+    } else if (d.del === "line") {
+      doc.lines = doc.lines.filter(l => l.id !== btn.closest("[data-line]").dataset.line);
+      renderEditor(); touch();
+    } else if (d.move) {
+      const id = btn.closest("[data-line]").dataset.line;
+      const i = doc.lines.findIndex(l => l.id === id);
+      const j = i + Number(d.move);
+      if (i < 0 || j < 0 || j >= doc.lines.length) return;
+      const [row] = doc.lines.splice(i, 1);
+      doc.lines.splice(j, 0, row);
+      renderEditor(); touch();
+    } else if (btn.id === "dup-quote") {
+      duplicate();
+    } else if (btn.id === "del-quote") {
+      archive();
+    }
+  }
+
+  async function duplicate() {
+    await save();
+    const copy = JSON.parse(JSON.stringify(doc));
+    const row = {
+      number: nextNumber(), status: "borrador",
+      client: copy.client.name || "", event_date: copy.gig.date || null,
+      total: Number(money(copy).total.toFixed(2)), data: copy
+    };
+    const { data: created, error } = await supa.from("booking_quotes").insert(row).select().single();
+    if (error) { showError("No se pudo duplicar: <code>" + esc(error.message) + "</code>"); return; }
+    quotes.unshift(created);
+    open(created.id);
+  }
+
+  async function archive() {
+    if (!confirm(`¿Archivar el presupuesto ${current.number}? Deja de salir en la lista.`)) return;
+    const { error } = await supa.from("booking_quotes").update({ archived: true }).eq("id", current.id);
+    if (error) { showError("No se pudo archivar: <code>" + esc(error.message) + "</code>"); return; }
+    quotes = quotes.filter(q => q.id !== current.id);
+    current = null; doc = null; view = "list";
+    render();
+  }
+
+  $("view-list").addEventListener("click", async e => {
+    const row = e.target.closest("[data-open]");
+    if (row) { open(row.dataset.open); return; }
+    if (e.target.closest("#new-quote")) {
+      const created = await createQuote();
+      if (created) open(created.id);
+    }
+  });
+  $("view-list").addEventListener("input", e => {
+    if (e.target.id !== "q") return;
+    query = e.target.value;
+    renderList();
+    const box = $("q");
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
+  });
+
+  $("view-edit").addEventListener("input", onEdit);
+  $("view-edit").addEventListener("change", onEdit);
+  $("view-edit").addEventListener("click", onEditClick);
+
+  $("modes").addEventListener("click", e => {
+    const b = e.target.closest("button[data-mode]");
+    if (!b) return;
+    view = b.dataset.mode === "doc" ? "doc" : "edit";
+    render();
+  });
+
+  $("back").addEventListener("click", async () => {
+    await save();
+    view = "list";
+    render();
+  });
+
+  $("print").addEventListener("click", async () => {
+    if (view !== "doc") { view = "doc"; render(); }
+    await save();
+    window.print();
+  });
+
+  document.addEventListener("keydown", e => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); save(); }
+  });
+  window.addEventListener("beforeunload", e => {
+    if ($("saver").classList.contains("dirty") || $("saver").classList.contains("saving")) {
+      e.preventDefault(); e.returnValue = "";
+    }
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && $("saver").classList.contains("dirty")) save();
+  });
+
+  /* ---------------- arranque ---------------- */
+  (async function () {
+    await BestaSuite.guard();
+    document.body.classList.add("ready");
+    BestaSuite.mountNav({ active: "presupuestos" });
+    supa = await BestaSuite.client();
+    await load();
+  })();
+})();
+</script>
+</body>
+</html>

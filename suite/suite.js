@@ -48,6 +48,15 @@
       status: "live"
     },
     {
+      id: "presupuestos",
+      name: "presupuestos",
+      href: "/suite/presupuestos.html",
+      tagline: "ofertas para salas y promotores",
+      desc: "Conceptos, IVA y retención calculados solos, con su número, su estado y el PDF listo para mandar.",
+      glyph: "§",
+      status: "live"
+    },
+    {
       id: "finanzas",
       name: "finanzas",
       href: "/suite/finanzas.html",
